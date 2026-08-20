@@ -1,0 +1,12 @@
+node_modules/
+.npm-cache/
+dist/
+.vite/
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local

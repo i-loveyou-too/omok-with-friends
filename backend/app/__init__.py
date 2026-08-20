@@ -1,0 +1,2 @@
+"""Authoritative Omok game server."""
+
