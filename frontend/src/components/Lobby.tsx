@@ -4,7 +4,7 @@ import type { CharacterId } from '../types'
 import { CharacterAvatar } from './CharacterAvatar'
 import { HomeBoardDecoration } from './HomeBoardDecoration'
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '/omok/api'
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '/omokwithfriend/api'
 const HERO_CHARACTERS: CharacterId[] = ['chiikawa', 'hachiware', 'usagi', 'momonga']
 
 interface HeroDisplayAsset {

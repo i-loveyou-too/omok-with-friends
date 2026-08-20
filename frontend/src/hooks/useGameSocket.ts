@@ -13,7 +13,7 @@ function websocketUrl(roomCode: string) {
   const configured = import.meta.env.VITE_WS_URL as string | undefined
   if (configured) return `${configured.replace(/\/$/, '')}/rooms/${roomCode}`
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${location.host}/omok/ws/rooms/${roomCode}`
+  return `${protocol}//${location.host}/omokwithfriend/ws/rooms/${roomCode}`
 }
 
 export function useGameSocket(

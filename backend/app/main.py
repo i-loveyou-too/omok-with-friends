@@ -53,24 +53,24 @@ async def game_error_handler(_: Request, exc: GameError) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"code": exc.code, "message": exc.message})
 
 
-@app.get("/omok/api/health")
+@app.get("/omokwithfriend/api/health")
 async def health() -> dict:
     return {"ok": True, "rooms": len(room_manager.rooms)}
 
 
-@app.post("/omok/api/rooms", status_code=201)
+@app.post("/omokwithfriend/api/rooms", status_code=201)
 async def create_room() -> dict:
     room = await room_manager.create()
     return {"roomCode": room.room_code}
 
 
-@app.get("/omok/api/rooms/{room_code}")
+@app.get("/omokwithfriend/api/rooms/{room_code}")
 async def room_status(room_code: str) -> dict:
     room = room_manager.get(room_code)
     return {"roomCode": room.room_code, "available": len(room.players) < 2}
 
 
-@app.websocket("/omok/ws/rooms/{room_code}")
+@app.websocket("/omokwithfriend/ws/rooms/{room_code}")
 async def room_socket(websocket: WebSocket, room_code: str) -> None:
     await websocket.accept()
     token = None
