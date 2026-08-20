@@ -27,7 +27,6 @@ export function PlayerCard({ player, self, active, winner, loser, reaction, pres
         <div className="player-name"><b>{player.nickname}</b>{self && <span>나</span>}</div>
         <div className="stone-label"><i className={`mini-stone mini-stone--${player.color}`} />{player.color === 'black' ? '흑' : '백'}</div>
       </div>
-      <strong className="score"><span>{player.score}</span>승</strong>
       {disconnected && <span className="offline-label">연결 끊김…</span>}
       {reconnected && <span className="reconnected-label">다시 왔어요!</span>}
     </article>

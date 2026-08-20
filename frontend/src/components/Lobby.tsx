@@ -1,4 +1,5 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
+import { characterAssets } from '../assets/characters/manifest'
 import type { CharacterId } from '../types'
 import { CharacterAvatar } from './CharacterAvatar'
 import { HomeBoardDecoration } from './HomeBoardDecoration'
@@ -6,15 +7,55 @@ import { HomeBoardDecoration } from './HomeBoardDecoration'
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '/omok/api'
 const HERO_CHARACTERS: CharacterId[] = ['chiikawa', 'hachiware', 'usagi', 'momonga']
 
+interface HeroDisplayAsset {
+  src: string
+  stateLabel: string
+}
+
+function heroAssetPool(character: CharacterId): HeroDisplayAsset[] {
+  const assets = characterAssets[character]
+  return [
+    { src: assets.poses.idle, stateLabel: 'idle' },
+    { src: assets.poses.selected, stateLabel: 'selected' },
+    { src: assets.poses.myTurn, stateLabel: 'myTurn' },
+    { src: assets.poses.waiting, stateLabel: 'waiting' },
+    { src: assets.reactions.laugh, stateLabel: 'reaction-laugh' },
+    { src: assets.reactions.clap, stateLabel: 'reaction-clap' },
+  ]
+}
+
+const previousHeroAsset = new Map<CharacterId, string>()
+
+function chooseHeroAsset(character: CharacterId): HeroDisplayAsset {
+  const pool = heroAssetPool(character)
+  const previous = previousHeroAsset.get(character)
+  const candidates = pool.filter((asset) => asset.src !== previous)
+  return candidates[Math.floor(Math.random() * candidates.length)]
+}
+
+function createHeroAssets(): Record<CharacterId, HeroDisplayAsset> {
+  return {
+    chiikawa: chooseHeroAsset('chiikawa'),
+    hachiware: chooseHeroAsset('hachiware'),
+    usagi: chooseHeroAsset('usagi'),
+    momonga: chooseHeroAsset('momonga'),
+  }
+}
+
 interface Props {
   onEnter: (roomCode: string) => void
 }
 
 export function Lobby({ onEnter }: Props) {
+  const [heroAssets] = useState(createHeroAssets)
   const [code, setCode] = useState('')
   const [showJoin, setShowJoin] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    HERO_CHARACTERS.forEach((character) => previousHeroAsset.set(character, heroAssets[character].src))
+  }, [heroAssets])
 
   const createRoom = async () => {
     setBusy(true)
@@ -59,7 +100,7 @@ export function Lobby({ onEnter }: Props) {
         <div className="home-character-group">
           {HERO_CHARACTERS.map((character, index) => (
             <div className={`home-character home-character--${index + 1}`} key={character}>
-              <CharacterAvatar character={character} mood="idle" />
+              <CharacterAvatar character={character} displayAsset={heroAssets[character]} />
             </div>
           ))}
           <HomeBoardDecoration />

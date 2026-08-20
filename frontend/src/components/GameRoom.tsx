@@ -110,7 +110,12 @@ export function GameRoom({ roomCode, profile, onSession, onLeave }: Props) {
     <main className="game-page">
       <header className="game-header">
         <button className="brand" onClick={() => leaveRoom(true)}>오목 한 판<span>?</span></button>
-        <button className="room-code" onClick={copyInvite}><small>ROOM</small><b>{roomCode}</b><span>{copied ? '복사됨!' : '초대 링크 복사'}</span></button>
+        <button className="room-code" onClick={copyInvite} aria-label={`방 ${roomCode} 초대 링크 복사`}>
+          <small>ROOM</small>
+          <b>{roomCode}</b>
+          <span className="room-copy-label">{copied ? '복사됨!' : '초대 링크 복사'}</span>
+          <span className="room-copy-icon" aria-hidden="true">⧉</span>
+        </button>
         <div className={`connection connection--${status}`}><i />{connectionLabel(status)}</div>
       </header>
 
