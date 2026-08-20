@@ -1,4 +1,4 @@
-import { characterAssets, type CharacterMood } from '../assets/characters/manifest'
+import { characterAssets, reactionKindByValue, type CharacterMood } from '../assets/characters/manifest'
 import type { CharacterId } from '../types'
 
 interface Props {
@@ -6,23 +6,17 @@ interface Props {
   mood?: CharacterMood
   active?: boolean
   reaction?: string
+  reactionNonce?: number
 }
 
-export function CharacterAvatar({ character, mood = 'default', active, reaction }: Props) {
+export function CharacterAvatar({ character, mood = 'idle', active, reaction, reactionNonce }: Props) {
   const config = characterAssets[character]
-  const image = config.assets[mood] ?? config.assets.default
+  const reactionKind = reaction ? reactionKindByValue[reaction] : undefined
+  const image = reactionKind ? config.reactions[reactionKind] : config.poses[mood]
   return (
     <div className={`avatar avatar--${config.theme} ${active ? 'is-active' : ''}`}>
-      {reaction && <span className="reaction-bubble" key={reaction}>{reaction}</span>}
-      {image ? (
-        <img src={image} alt={config.label} />
-      ) : (
-        <span className="avatar-placeholder" aria-label={`${config.label} 이미지 자리`}>
-          <b>{config.shortLabel}</b>
-          <small>{config.label}</small>
-        </span>
-      )}
+      {reaction && <span className="reaction-bubble" key={`${reaction}-${reactionNonce ?? 0}`}>{reaction}</span>}
+      <img src={image} alt={`${config.label} ${mood} 상태`} draggable={false} />
     </div>
   )
 }
-

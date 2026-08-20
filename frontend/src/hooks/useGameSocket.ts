@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConnectionStatus, GameState, Profile, ReactionEvent, Session } from '../types'
+import type { ConnectionStatus, GameState, PresenceEvent, Profile, ReactionEvent, Session } from '../types'
 
 type ServerMessage =
   | { type: 'joined'; token: string; playerId: string; reconnected: boolean }
@@ -24,12 +24,14 @@ export function useGameSocket(
   const socketRef = useRef<WebSocket | null>(null)
   const tokenRef = useRef(profile.token)
   const retryRef = useRef<number | undefined>(undefined)
+  const reactionTimerRef = useRef<number | undefined>(undefined)
+  const presenceTimerRef = useRef<number | undefined>(undefined)
   const [state, setState] = useState<GameState | null>(null)
   const [status, setStatus] = useState<ConnectionStatus>('connecting')
   const [selfId, setSelfId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reaction, setReaction] = useState<ReactionEvent | null>(null)
-  const [presence, setPresence] = useState<string | null>(null)
+  const [presence, setPresence] = useState<PresenceEvent | null>(null)
   const onSessionRef = useRef(onSession)
   onSessionRef.current = onSession
 
@@ -65,14 +67,21 @@ export function useGameSocket(
             token: message.token,
             playerId: message.playerId,
           })
-          if (message.reconnected) setPresence('다시 왔어요!')
+          if (message.reconnected) {
+            setPresence({ playerId: message.playerId, status: 'reconnected', nonce: Date.now() })
+            if (presenceTimerRef.current) window.clearTimeout(presenceTimerRef.current)
+            presenceTimerRef.current = window.setTimeout(() => setPresence(null), 2600)
+          }
         } else if (message.type === 'game_state') {
           setState(message.state)
         } else if (message.type === 'reaction') {
           setReaction({ ...message, nonce: Date.now() })
+          if (reactionTimerRef.current) window.clearTimeout(reactionTimerRef.current)
+          reactionTimerRef.current = window.setTimeout(() => setReaction(null), 2600)
         } else if (message.type === 'presence') {
-          setPresence(message.status === 'disconnected' ? '연결 끊김…' : '다시 왔어요!')
-          window.setTimeout(() => setPresence(null), 2600)
+          setPresence({ ...message, nonce: Date.now() })
+          if (presenceTimerRef.current) window.clearTimeout(presenceTimerRef.current)
+          presenceTimerRef.current = window.setTimeout(() => setPresence(null), 2600)
         } else if (message.type === 'error') {
           setError(message.message)
           window.setTimeout(() => setError(null), 3000)
@@ -94,6 +103,8 @@ export function useGameSocket(
     return () => {
       active = false
       if (retryRef.current) window.clearTimeout(retryRef.current)
+      if (reactionTimerRef.current) window.clearTimeout(reactionTimerRef.current)
+      if (presenceTimerRef.current) window.clearTimeout(presenceTimerRef.current)
       socketRef.current?.close(1000)
     }
   }, [roomCode, profile.nickname, profile.character, profile.token])

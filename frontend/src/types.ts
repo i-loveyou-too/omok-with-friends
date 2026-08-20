@@ -53,3 +53,9 @@ export interface ReactionEvent {
   value: string
   nonce: number
 }
+
+export interface PresenceEvent {
+  playerId: string
+  status: 'disconnected' | 'reconnected'
+  nonce: number
+}

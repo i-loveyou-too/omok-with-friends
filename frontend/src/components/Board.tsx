@@ -35,7 +35,7 @@ export function Board({ board, forbidden, lastMove, winningLine, disabled, cente
               onClick={() => onMove(rowIndex, colIndex)}
             >
               {stone && <span className={`stone stone--${stone}`}><i /></span>}
-              {!stone && isForbidden && <span className="forbidden" aria-hidden="true">🚫</span>}
+              {!stone && isForbidden && <span className="forbidden" aria-hidden="true"><i /></span>}
               {!stone && centerOnly && rowIndex === 7 && colIndex === 7 && <span className="center-hint" />}
             </button>
           )
@@ -44,4 +44,3 @@ export function Board({ board, forbidden, lastMove, winningLine, disabled, cente
     </div>
   )
 }
-

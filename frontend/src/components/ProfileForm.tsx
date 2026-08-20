@@ -41,7 +41,7 @@ export function ProfileForm({ roomCode, onSubmit, onBack }: Props) {
             {(Object.keys(characterAssets) as CharacterId[]).map((id) => (
               <label className={character === id ? 'selected' : ''} key={id}>
                 <input type="radio" name="character" value={id} checked={character === id} onChange={() => setCharacter(id)} />
-                <CharacterAvatar character={id} />
+                <CharacterAvatar character={id} mood={character === id ? 'selected' : 'idle'} />
                 <span>{characterAssets[id].label}</span>
               </label>
             ))}
@@ -52,4 +52,3 @@ export function ProfileForm({ roomCode, onSubmit, onBack }: Props) {
     </main>
   )
 }
-

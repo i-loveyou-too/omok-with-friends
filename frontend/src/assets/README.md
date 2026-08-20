@@ -1,18 +1,13 @@
-# Asset slots
+# Final game assets
 
-Character images are intentionally not bundled. Add approved files under
-`characters/<character>/` and connect their URLs in `characters/manifest.ts`.
-The manifest already has slots for default, turn, waiting, thinking, win,
-lose, disconnected, reconnected and reaction states.
+Approved character sprites live under `characters/<character>/` and are wired only through `characters/manifest.ts`.
 
-Optional visual assets can be organized under:
+Each character has 512×512 transparent WebP files for:
 
-- `reactions/`
-- `board/`
-- `backgrounds/`
-- `decorations/`
-- `ui/`
+- idle, selected, my turn, waiting, thinking
+- win, lose, disconnected, reconnected
+- six reaction poses
 
-All dynamic labels, scores, room codes and reactions remain HTML text. The
-board is rendered as interactive HTML/CSS rather than an image.
+The files are deterministic crops from the matching character's own final master sheet. Do not mix sources, trace the character artwork, or hard-code sprite paths inside components.
 
+Board lines, stones, last-move/forbidden markers, buttons, speech bubbles, backgrounds, and decorative elements remain interactive DOM/CSS/SVG. Dynamic labels, scores, room codes, and reactions remain accessible HTML text.
