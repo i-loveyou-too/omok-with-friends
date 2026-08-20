@@ -36,6 +36,7 @@ export function useGameSocket(
   roomCode: string,
   profile: Profile,
   onSession: (session: Session) => void,
+  onRoomMissing?: () => void,
 ) {
   const socketRef = useRef<WebSocket | null>(null)
   const tokenRef = useRef(profile.token)
@@ -56,6 +57,8 @@ export function useGameSocket(
   const [turnTimeout, setTurnTimeout] = useState<TurnTimeoutEvent | null>(null)
   const onSessionRef = useRef(onSession)
   onSessionRef.current = onSession
+  const onRoomMissingRef = useRef(onRoomMissing)
+  onRoomMissingRef.current = onRoomMissing
 
   useEffect(() => {
     let active = true
@@ -129,6 +132,11 @@ export function useGameSocket(
           if (presenceTimerRef.current) window.clearTimeout(presenceTimerRef.current)
           presenceTimerRef.current = window.setTimeout(() => setPresence(null), 2600)
         } else if (message.type === 'error') {
+          if (message.code === 'room_not_found') {
+            onRoomMissingRef.current?.()
+            socket.close(1000)
+            return
+          }
           setErrorEvent({ code: message.code, message: message.message, nonce: Date.now() })
           if (errorTimerRef.current) window.clearTimeout(errorTimerRef.current)
           errorTimerRef.current = window.setTimeout(() => setErrorEvent(null), 3000)

@@ -1,6 +1,6 @@
 import pytest
 
-from app.game import TURN_DURATION_SECONDS, GameError, GameState
+from app.game import TURN_DURATION_SECONDS, GameError, GameState, Move
 from app.renju import BLACK, CENTER, WHITE
 
 
@@ -98,6 +98,33 @@ def test_move_and_reaction_events_have_unique_server_ids():
     reaction_b = room.reaction(second.token, "빨리하세욧!")
     assert reaction_a["id"] != reaction_b["id"]
     assert reaction_a["expiresAt"] > reaction_a["createdAt"]
+
+
+def test_server_rejects_white_forbidden_move():
+    room, first, second = room_with_players()
+    room.board[CENTER][CENTER] = BLACK
+    room.moves.append(Move(CENTER, CENTER, BLACK, first.token))
+    room.turn = WHITE
+    room.board[6][5] = WHITE
+    room.board[6][7] = WHITE
+    room.board[5][6] = WHITE
+    room.board[7][6] = WHITE
+
+    assert_error("forbidden", lambda: room.make_move(second.token, 6, 6))
+    assert room.board[6][6] is None
+
+
+def test_snapshot_lists_forbidden_points_for_white_turn():
+    room, first, _ = room_with_players()
+    room.board[CENTER][CENTER] = BLACK
+    room.moves.append(Move(CENTER, CENTER, BLACK, first.token))
+    room.turn = WHITE
+    room.board[6][5] = WHITE
+    room.board[6][7] = WHITE
+    room.board[5][6] = WHITE
+    room.board[7][6] = WHITE
+
+    assert {"row": 6, "col": 6, "reason": "double_three"} in room.snapshot()["forbidden"]
 
 
 def test_undo_result_has_request_and_event_ids_and_restarts_timer():

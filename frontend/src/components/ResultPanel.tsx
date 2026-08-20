@@ -26,11 +26,12 @@ interface Props {
   self: Player
   opponent?: Player
   rematchPending: boolean
+  homePending?: boolean
   onRematch: () => void
   onHome: () => void
 }
 
-export function ResultPanel({ result, self, opponent, rematchPending, onRematch, onHome }: Props) {
+export function ResultPanel({ result, self, opponent, rematchPending, homePending = false, onRematch, onHome }: Props) {
   const title = result === 'win' ? '승리!' : result === 'lose' ? '아쉽다...' : '무승부!'
   return (
     <article className={`result-panel result-panel--${result} result-panel--${characterAssets[self.character].theme}`} aria-live="polite">
@@ -65,10 +66,10 @@ export function ResultPanel({ result, self, opponent, rematchPending, onRematch,
       </div>
 
       <div className="result-actions">
-        <button className="result-button result-button--rematch" disabled={rematchPending} onClick={onRematch}>
+        <button className="result-button result-button--rematch" disabled={rematchPending || homePending} onClick={onRematch}>
           {rematchPending ? '상대 선택을 기다리는 중...' : '다시 한 판'}
         </button>
-        <button className="result-button result-button--home" onClick={onHome}>메인으로</button>
+        <button className="result-button result-button--home" disabled={rematchPending || homePending} onClick={onHome}>{homePending ? '이동 중...' : '메인으로'}</button>
       </div>
     </article>
   )

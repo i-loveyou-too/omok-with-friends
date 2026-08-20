@@ -128,10 +128,9 @@ class GameState:
             raise GameError("occupied", "이미 돌이 놓인 자리예요.")
         if not self.moves and (row, col) != (CENTER, CENTER):
             raise GameError("first_move_center", "첫 수는 정중앙에 놓아 주세요.")
-        if player.color == BLACK:
-            analysis = self.engine.analyze_black_move(self.board, row, col)
-            if analysis.forbidden:
-                raise GameError("forbidden", f"흑의 금수예요: {analysis.forbidden.value}")
+        analysis = self.engine.analyze_move(self.board, row, col, player.color)
+        if analysis.forbidden:
+            raise GameError("forbidden", f"금수예요: {analysis.forbidden.value}")
 
         self.board[row][col] = player.color
         self.moves.append(Move(row, col, player.color, token))
@@ -269,10 +268,10 @@ class GameState:
 
     def snapshot(self) -> dict:
         forbidden = []
-        if self.status == "playing" and self.turn == BLACK and self.moves:
+        if self.status == "playing" and self.moves:
             forbidden = [
                 {"row": row, "col": col, "reason": reason}
-                for row, col, reason in self.engine.forbidden_points(self.board)
+                for row, col, reason in self.engine.forbidden_points(self.board, self.turn)
             ]
         return {
             "roomCode": self.room_code,

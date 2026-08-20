@@ -58,7 +58,7 @@ export function Board({ board, forbidden, lastMove, winningLine, disabled, cente
             const isForbidden = banned.has(pointKey)
             const isLast = lastMove?.row === row && lastMove?.col === col
             const isCandidate = candidate?.row === row && candidate?.col === col
-            const canPlay = !disabled && !stone && !isForbidden && (!centerOnly || (row === 7 && col === 7))
+            const canSelect = !disabled && !stone && (!centerOnly || (row === 7 && col === 7))
             const geometry = getIntersectionGeometry(row, col)
 
             return (
@@ -75,7 +75,7 @@ export function Board({ board, forbidden, lastMove, winningLine, disabled, cente
                 {!stone && isCandidate && candidateColor && <span className={`candidate-stone candidate-stone--${candidateColor}`} />}
                 {!stone && isForbidden && <span className="forbidden"><i /></span>}
                 {!stone && centerOnly && row === 7 && col === 7 && <span className="center-hint" />}
-                {!stone && canPlay && hovered === pointKey && <span className="hover-preview" />}
+                {!stone && canSelect && hovered === pointKey && <span className="hover-preview" />}
               </span>
             )
           })}
@@ -85,7 +85,7 @@ export function Board({ board, forbidden, lastMove, winningLine, disabled, cente
           {points.map(({ row, col, stone }) => {
             const pointKey = key(row, col)
             const isForbidden = banned.has(pointKey)
-            const canPlay = !disabled && !stone && !isForbidden && (!centerOnly || (row === 7 && col === 7))
+            const canSelect = !disabled && !stone && (!centerOnly || (row === 7 && col === 7))
 
             return (
               <button
@@ -93,12 +93,12 @@ export function Board({ board, forbidden, lastMove, winningLine, disabled, cente
                 type="button"
                 role="gridcell"
                 aria-label={`${row + 1}행 ${col + 1}열${stone ? ` ${stone === 'black' ? '흑돌' : '백돌'}` : ''}${candidate?.row === row && candidate?.col === col ? ' 후보' : ''}${isForbidden ? ' 금수' : ''}`}
-                disabled={!canPlay}
+                disabled={!canSelect}
                 key={pointKey}
                 onBlur={() => setHovered((current) => current === pointKey ? null : current)}
                 onClick={() => onMove(row, col)}
-                onFocus={() => canPlay && setHovered(pointKey)}
-                onMouseEnter={() => canPlay && setHovered(pointKey)}
+                onFocus={() => canSelect && setHovered(pointKey)}
+                onMouseEnter={() => canSelect && setHovered(pointKey)}
                 onMouseLeave={() => setHovered((current) => current === pointKey ? null : current)}
                 style={hitStyle(row, col)}
               />

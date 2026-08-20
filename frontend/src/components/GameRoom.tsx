@@ -18,7 +18,14 @@ interface Props {
   profile: Profile
   onSession: (session: Session) => void
   onLeave: () => void
+  onRoomMissing?: () => void
 }
+
+const FORBIDDEN_COPY = {
+  double_three: '3-3 금지수예요!',
+  double_four: '4-4 금지수예요!',
+  overline: '장목은 둘 수 없어요.',
+} as const
 
 function connectionLabel(status: string) {
   if (status === 'connected') return '연결됨'
@@ -27,17 +34,18 @@ function connectionLabel(status: string) {
   return '연결 중'
 }
 
-export function GameRoom({ roomCode, profile, onSession, onLeave }: Props) {
+export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing }: Props) {
   const {
     state, status, selfId, error, errorEvent, reactions, presence,
     moveConfirmed, undoRequested, undoResult, turnTimeout, send,
-  } = useGameSocket(roomCode, profile, onSession)
+  } = useGameSocket(roomCode, profile, onSession, onRoomMissing)
   const { muted, needsGesture, startBgm, toggleMute, playEffect } = useGameAudio()
   const [copied, setCopied] = useState(false)
   const [lastReactionAt, setLastReactionAt] = useState(0)
   const [candidate, setCandidate] = useState<Point | null>(null)
   const [moveSubmitting, setMoveSubmitting] = useState(false)
   const [undoResponding, setUndoResponding] = useState(false)
+  const [resultAction, setResultAction] = useState<'rematch' | 'home' | null>(null)
   const [systemNotice, setSystemNotice] = useState<{ id: string; text: string } | null>(null)
   const noticeTimerRef = useRef<number | undefined>(undefined)
 
@@ -54,9 +62,16 @@ export function GameRoom({ roomCode, profile, onSession, onLeave }: Props) {
     : selfTurn ? '내 차례예요!' : '상대가 생각 중…'
 
   const forbidden = useMemo(() => {
-    if (!state || self?.color !== 'black' || state.turn !== 'black') return []
+    if (!state || state.status !== 'playing' || self?.color !== state.turn) return []
     return state.forbidden
   }, [state, self?.color])
+  const candidateForbidden = candidate
+    ? forbidden.find((point) => point.row === candidate.row && point.col === candidate.col) ?? null
+    : null
+  const candidateMessage = candidateForbidden
+    ? FORBIDDEN_COPY[candidateForbidden.reason]
+    : candidate ? `${candidate.row + 1}행 ${candidate.col + 1}열을 선택했어요`
+    : '빈 교차점을 먼저 선택해 주세요'
 
   const showSystemNotice = (id: string, text: string) => {
     setSystemNotice({ id, text })
@@ -116,6 +131,7 @@ export function GameRoom({ roomCode, profile, onSession, onLeave }: Props) {
   useEffect(() => {
     setCandidate(null)
     setMoveSubmitting(false)
+    setResultAction(null)
   }, [state?.gameNumber, state?.turn, state?.status, state?.lastMove?.row, state?.lastMove?.col, state?.undoRequestId])
 
   useEffect(() => {
@@ -142,7 +158,7 @@ export function GameRoom({ roomCode, profile, onSession, onLeave }: Props) {
   }
 
   const confirmMove = () => {
-    if (!candidate || !selfTurn || status !== 'connected' || moveSubmitting) return
+    if (!candidate || candidateForbidden || !selfTurn || status !== 'connected' || moveSubmitting || ended) return
     if (send({ type: 'move', row: candidate.row, col: candidate.col })) setMoveSubmitting(true)
   }
 
@@ -155,6 +171,17 @@ export function GameRoom({ roomCode, profile, onSession, onLeave }: Props) {
     if (ask && !confirm('진행 중인 방을 나갈까요?')) return
     send({ type: 'leave' })
     onLeave()
+  }
+
+  const requestRematch = () => {
+    if (resultAction || status !== 'connected') return
+    if (send({ type: 'rematch_request' })) setResultAction('rematch')
+  }
+
+  const goResultHome = () => {
+    if (resultAction === 'home') return
+    setResultAction('home')
+    leaveRoom(false)
   }
 
   const soundButton = (
@@ -203,7 +230,18 @@ export function GameRoom({ roomCode, profile, onSession, onLeave }: Props) {
   const undoIsMine = state.undoRequestedBy === selfId
   const undoFromOpponent = Boolean(state.undoRequestedBy && !undoIsMine)
   const rematchMine = Boolean(selfId && state.rematchReady.includes(selfId))
-  const boardDisabled = !selfTurn || status !== 'connected' || moveSubmitting
+  const boardDisabled = !selfTurn || status !== 'connected' || moveSubmitting || ended
+  const resultPanel = ended && self ? (
+    <ResultPanel
+      result={state.status === 'draw' ? 'draw' : winner?.id === selfId ? 'win' : 'lose'}
+      self={self}
+      opponent={opponent}
+      rematchPending={rematchMine || resultAction === 'rematch'}
+      homePending={resultAction === 'home'}
+      onRematch={requestRematch}
+      onHome={goResultHome}
+    />
+  ) : null
 
   return (
     <main className="game-page">
@@ -237,31 +275,30 @@ export function GameRoom({ roomCode, profile, onSession, onLeave }: Props) {
             <h1>{title}</h1>
             <p>{state.firstMoveCenterOnly && selfTurn ? '첫 수는 가운데에 톡!' : ' '}</p>
           </div>
-          {undoFromOpponent && (
+          {undoFromOpponent && !ended && (
             <div className="undo-request-overlay" role="dialog" aria-label="상대의 무르기 요청">
               <b>상대가 무르기를 요청했어요</b>
               <div><button disabled={undoResponding || status !== 'connected'} onClick={() => respondUndo(false)}>거절</button><button disabled={undoResponding || status !== 'connected'} onClick={() => respondUndo(true)}>수락</button></div>
             </div>
           )}
+          {resultPanel && <div className="board-result-overlay" role="dialog" aria-modal="true"><div className="board-result-dim" aria-hidden="true" />{resultPanel}</div>}
           <Board board={state.board} forbidden={forbidden} lastMove={state.lastMove} winningLine={state.winningLine} centerOnly={state.firstMoveCenterOnly} candidate={candidate} candidateColor={self?.color ?? null} disabled={boardDisabled} onMove={(row, col) => setCandidate({ row, col })} />
           {!ended && (
-            <div className="move-confirm-bar">
-              <span>{candidate ? `${candidate.row + 1}행 ${candidate.col + 1}열을 선택했어요` : '빈 교차점을 먼저 선택해 주세요'}</span>
-              <button disabled={!candidate || boardDisabled} onClick={confirmMove}>{moveSubmitting ? '확인 중…' : '여기에 놓기'}</button>
+            <div className={`move-confirm-bar ${candidateForbidden ? 'is-forbidden' : ''}`}>
+              <span>{candidateMessage}</span>
+              <button disabled={!candidate || Boolean(candidateForbidden) || boardDisabled} onClick={confirmMove}>{moveSubmitting ? '확인 중…' : '여기에 놓기'}</button>
             </div>
           )}
         </section>
 
-        {ended && self ? (
-          <aside className="result-slot"><ResultPanel result={state.status === 'draw' ? 'draw' : winner?.id === selfId ? 'win' : 'lose'} self={self} opponent={opponent} rematchPending={rematchMine} onRematch={() => send({ type: 'rematch_request' })} onHome={() => leaveRoom(false)} /></aside>
-        ) : (
+        {!ended && (
           <aside className="action-panel">
             <div className="reaction-box"><h2>한마디 톡!</h2><div>{REACTIONS.map((item) => <button key={item} onClick={() => sendReaction(item)}>{item}</button>)}</div></div>
             <div className="utility-actions">
               <button disabled={state.status !== 'playing' || undoIsMine || status !== 'connected'} onClick={() => send({ type: 'undo_request' })}>{undoIsMine ? '응답 기다리는 중…' : '↶ 무르기 요청'}</button>
               <button className="danger" disabled={state.status !== 'playing'} onClick={() => { if (confirm('정말 기권할까요? 상대에게 1승이 주어져요.')) send({ type: 'resign' }) }}>⚑ 기권</button>
             </div>
-            <p className="rule-note"><i>🚫</i><span><b>렌주 규칙</b>흑은 3-3, 4-4, 장목 금수</span></p>
+            <p className="rule-note"><i>🚫</i><span><b>공통 금지</b>흑/백 모두 3-3, 4-4, 장목 금수</span></p>
           </aside>
         )}
       </section>

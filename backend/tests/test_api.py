@@ -76,3 +76,9 @@ def test_create_room_and_two_player_websocket_game():
             assert undo_result_a["type"] == undo_result_b["type"] == "undo_result"
             assert undo_result_a["accepted"] is True
             assert undo_result_a["eventId"] == undo_result_b["eventId"]
+
+
+def test_missing_room_status_returns_not_found():
+    response = client.get("/omok/api/rooms/ZZZZZ")
+    assert response.status_code == 404
+    assert response.json()["code"] == "room_not_found"

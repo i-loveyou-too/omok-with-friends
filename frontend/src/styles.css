@@ -154,6 +154,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .candidate-stone--white { background:radial-gradient(circle at 34% 28%,#fff,#e8e2d5 75%);border:1px solid #bdb29f;box-shadow:0 0 0 3px #fff9,0 0 0 5px #6bb9ce }
 .move-confirm-bar { min-height:54px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding:7px 8px 7px 15px;border:2px solid white;border-radius:17px;background:#fffdf5;box-shadow:0 5px 13px #6c573619 }
 .move-confirm-bar span { color:#8b7d6d;font-size:11px;font-weight:800 }
+.move-confirm-bar.is-forbidden { border-color:#f0aaa6;background:#fff2f0 }.move-confirm-bar.is-forbidden span { color:#b95754 }
 .move-confirm-bar button { min-width:130px;min-height:42px;border:0;border-radius:13px;background:#79c3e7;color:#244f67;font-weight:900;box-shadow:0 3px 0 #4f9fc6;cursor:pointer }
 .move-confirm-bar button:disabled { background:#ded8cd;box-shadow:0 3px 0 #c7bfb2;color:#968d82 }
 .undo-request-overlay { position:absolute;z-index:50;left:50%;top:82px;transform:translateX(-50%);width:min(88%,360px);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:3px solid white;border-radius:18px;background:#fff1c8;box-shadow:0 10px 25px #5c452f40 }
@@ -161,6 +162,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .undo-request-overlay button { min-width:58px;min-height:38px;border:0;border-radius:11px;background:#fff;color:#8b6258;font-weight:900;cursor:pointer }
 .undo-request-overlay button:last-child { background:#95d4be;color:#315f53 }
 .system-notice { position:fixed;z-index:130;left:50%;top:88px;transform:translateX(-50%);max-width:min(90vw,460px);padding:11px 18px;border:3px solid white;border-radius:999px;background:#4f7180;color:white;box-shadow:0 8px 24px #314a5540;font-size:13px;font-weight:900;white-space:nowrap;animation:toast-in .2s }
+.board-result-overlay { position:absolute;z-index:220;left:0;right:0;top:74px;aspect-ratio:1;display:grid;place-items:center;pointer-events:auto }
+.board-result-dim { position:absolute;inset:0;border-radius:24px;background:rgba(73,58,43,.18);backdrop-filter:blur(2px) }
+.board-result-overlay .result-panel { z-index:1;width:min(calc(100% - 42px),390px);max-height:calc(100% - 28px);overflow:auto }
 .result-card { position: absolute; z-index: 15; left: 50%; top: 52%; transform: translate(-50%,-50%); width: min(78%, 350px); padding: 22px; border: 3px solid white; border-radius: 28px; text-align: center; background: rgba(255,250,234,.94); box-shadow: 0 10px 35px #583e2860; backdrop-filter: blur(4px); }
 .result-card b { display: block; font: 35px 'Jua'; color: #b9786d; }
 .result-card span { display: block; margin: 5px 0 15px; font-weight: 800; }
@@ -187,6 +191,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .loading-page { display: grid; place-content: center; justify-items: center; background: linear-gradient(#dff3f5, #fff9e9); text-align: center; }
 .loading-page h1 { margin: 20px 0 2px; font: 30px 'Jua'; }.loading-page p { margin: 0; color: #897d6f; }
 .loading-stone { width: 46px; height: 46px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #666, #111 70%); box-shadow: 0 5px 8px #0003; animation: loading-roll 1.4s infinite; }
+.empty-room-page { display:grid;place-items:center;padding:70px 18px 44px;background:linear-gradient(180deg,#d9f3ff,#fff9e9 62%,#d8ebb9);text-align:center }
+.empty-room-card { position:relative;z-index:1;width:min(100%,430px);padding:34px 28px 30px;border:3px solid white;border-radius:34px;background:rgba(255,253,244,.94);box-shadow:var(--shadow) }
+.empty-room-character { height:150px;display:grid;place-items:center }.empty-room-character .avatar { width:165px }
+.empty-room-card h1 { margin:6px 0 8px;font:34px 'Jua';color:var(--brown) }.empty-room-card p { margin:0 0 22px;color:#81766a;font-weight:800;line-height:1.5 }
 
 @media (max-width: 1050px) {
   .game-layout { grid-template-columns: minmax(170px, .6fr) minmax(450px, 620px); }
@@ -221,6 +229,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .status-line p { min-height: 14px; font-size: 10px; }
   .status-meta { gap:5px }.status-meta b { min-width:62px;padding:3px 7px;font-size:9px }
   .board-frame { padding: 13px; border-radius: 16px; box-shadow: 0 7px 0 #674629, 0 14px 25px #56392035; }
+  .board-result-overlay { top:49px }.board-result-dim{border-radius:16px}.board-result-overlay .result-panel{width:calc(100% - 28px);max-height:calc(100% - 20px);padding:12px 10px 11px;border-radius:20px}.board-result-overlay .result-panel h2{font-size:28px}.board-result-overlay .result-eyebrow{font-size:8px}.board-result-overlay .result-character{height:74px}.board-result-overlay .result-character .avatar{width:98px}.board-result-overlay .result-crown{top:-2px;font-size:27px}.board-result-overlay .result-message{margin:0 0 7px}.board-result-overlay .result-message b{font-size:13px}.board-result-overlay .result-message span{font-size:10px}.board-result-overlay .result-score{margin-bottom:7px;padding:6px 7px;border-radius:13px}.board-result-overlay .result-score b{font-size:19px}.board-result-overlay .result-score span{font-size:10px}.board-result-overlay .result-actions{gap:6px}.board-result-overlay .result-button{min-height:46px;padding:7px 4px;border-radius:13px;font-size:12px}.board-result-overlay .draw-character-group{height:58px;margin-top:0}.board-result-overlay .draw-character-group .avatar{width:45px;margin:0 -6px}
   .move-confirm-bar { min-height:52px;margin-top:10px;padding:6px 7px 6px 12px }.move-confirm-bar span { font-size:10px }.move-confirm-bar button { min-width:116px;min-height:44px }
   .undo-request-overlay { position:fixed;z-index:140;left:10px;right:10px;top:max(112px,calc(env(safe-area-inset-top) + 88px));width:auto;transform:none;padding:11px 12px }
   .undo-request-overlay button { min-width:64px;min-height:44px }
@@ -237,6 +246,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .toast { bottom: calc(14px + env(safe-area-inset-bottom)); white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
   .profile-card { padding: 34px 18px 25px; border-radius: 30px; }
   .character-picker > div { grid-template-columns: repeat(2, 1fr); }
+  .empty-room-card { padding:28px 18px 24px;border-radius:28px }.empty-room-card h1{font-size:29px}.empty-room-character{height:130px}.empty-room-character .avatar{width:145px}
 }
 
 @media (max-width: 390px) {
