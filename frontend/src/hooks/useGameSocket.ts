@@ -1,10 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConnectionStatus, GameState, PresenceEvent, Profile, ReactionEvent, Session } from '../types'
+import type {
+  ConnectionStatus,
+  GameErrorEvent,
+  GameState,
+  MoveConfirmedEvent,
+  PresenceEvent,
+  Profile,
+  ReactionEvent,
+  Session,
+  TurnTimeoutEvent,
+  UndoRequestEvent,
+  UndoResultEvent,
+} from '../types'
 
 type ServerMessage =
   | { type: 'joined'; token: string; playerId: string; reconnected: boolean }
   | { type: 'game_state'; state: GameState }
-  | { type: 'reaction'; playerId: string; value: string }
+  | ({ type: 'reaction' } & ReactionEvent)
+  | ({ type: 'move_confirmed' } & MoveConfirmedEvent)
+  | ({ type: 'undo_requested' } & UndoRequestEvent)
+  | ({ type: 'undo_result' } & UndoResultEvent)
+  | ({ type: 'turn_timeout' } & TurnTimeoutEvent)
   | { type: 'presence'; playerId: string; status: 'disconnected' | 'reconnected' }
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' }
@@ -24,20 +40,38 @@ export function useGameSocket(
   const socketRef = useRef<WebSocket | null>(null)
   const tokenRef = useRef(profile.token)
   const retryRef = useRef<number | undefined>(undefined)
-  const reactionTimerRef = useRef<number | undefined>(undefined)
+  const reactionTimersRef = useRef(new Map<string, number>())
   const presenceTimerRef = useRef<number | undefined>(undefined)
+  const errorTimerRef = useRef<number | undefined>(undefined)
+  const seenEventIdsRef = useRef(new Set<string>())
   const [state, setState] = useState<GameState | null>(null)
   const [status, setStatus] = useState<ConnectionStatus>('connecting')
   const [selfId, setSelfId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [reaction, setReaction] = useState<ReactionEvent | null>(null)
+  const [errorEvent, setErrorEvent] = useState<GameErrorEvent | null>(null)
+  const [reactions, setReactions] = useState<ReactionEvent[]>([])
   const [presence, setPresence] = useState<PresenceEvent | null>(null)
+  const [moveConfirmed, setMoveConfirmed] = useState<MoveConfirmedEvent | null>(null)
+  const [undoRequested, setUndoRequested] = useState<UndoRequestEvent | null>(null)
+  const [undoResult, setUndoResult] = useState<UndoResultEvent | null>(null)
+  const [turnTimeout, setTurnTimeout] = useState<TurnTimeoutEvent | null>(null)
   const onSessionRef = useRef(onSession)
   onSessionRef.current = onSession
 
   useEffect(() => {
     let active = true
     let attempts = 0
+    seenEventIdsRef.current.clear()
+    setReactions([])
+    setMoveConfirmed(null)
+    setUndoRequested(null)
+    setUndoResult(null)
+    setTurnTimeout(null)
+
+    const acceptEvent = (id: string) => {
+      if (seenEventIdsRef.current.has(id)) return false
+      seenEventIdsRef.current.add(id)
+      return true
+    }
 
     const connect = () => {
       if (!active) return
@@ -75,16 +109,29 @@ export function useGameSocket(
         } else if (message.type === 'game_state') {
           setState(message.state)
         } else if (message.type === 'reaction') {
-          setReaction({ ...message, nonce: Date.now() })
-          if (reactionTimerRef.current) window.clearTimeout(reactionTimerRef.current)
-          reactionTimerRef.current = window.setTimeout(() => setReaction(null), 2600)
+          if (!acceptEvent(message.id)) return
+          setReactions((current) => [...current, message])
+          const lifetime = Math.max(0, message.expiresAt - message.createdAt)
+          reactionTimersRef.current.set(message.id, window.setTimeout(() => {
+            setReactions((current) => current.filter((item) => item.id !== message.id))
+            reactionTimersRef.current.delete(message.id)
+          }, lifetime))
+        } else if (message.type === 'move_confirmed') {
+          if (acceptEvent(message.eventId)) setMoveConfirmed(message)
+        } else if (message.type === 'undo_requested') {
+          if (acceptEvent(message.requestId)) setUndoRequested(message)
+        } else if (message.type === 'undo_result') {
+          if (acceptEvent(message.eventId)) setUndoResult(message)
+        } else if (message.type === 'turn_timeout') {
+          if (acceptEvent(message.eventId)) setTurnTimeout(message)
         } else if (message.type === 'presence') {
           setPresence({ ...message, nonce: Date.now() })
           if (presenceTimerRef.current) window.clearTimeout(presenceTimerRef.current)
           presenceTimerRef.current = window.setTimeout(() => setPresence(null), 2600)
         } else if (message.type === 'error') {
-          setError(message.message)
-          window.setTimeout(() => setError(null), 3000)
+          setErrorEvent({ code: message.code, message: message.message, nonce: Date.now() })
+          if (errorTimerRef.current) window.clearTimeout(errorTimerRef.current)
+          errorTimerRef.current = window.setTimeout(() => setErrorEvent(null), 3000)
         }
       }
       socket.onclose = (event) => {
@@ -103,8 +150,10 @@ export function useGameSocket(
     return () => {
       active = false
       if (retryRef.current) window.clearTimeout(retryRef.current)
-      if (reactionTimerRef.current) window.clearTimeout(reactionTimerRef.current)
+      reactionTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+      reactionTimersRef.current.clear()
       if (presenceTimerRef.current) window.clearTimeout(presenceTimerRef.current)
+      if (errorTimerRef.current) window.clearTimeout(errorTimerRef.current)
       socketRef.current?.close(1000)
     }
   }, [roomCode, profile.nickname, profile.character, profile.token])
@@ -115,9 +164,24 @@ export function useGameSocket(
       socket.send(JSON.stringify(payload))
       return true
     }
-    setError('연결을 다시 확인하고 있어요.')
+    setErrorEvent({ code: 'socket_unavailable', message: '연결을 다시 확인하고 있어요.', nonce: Date.now() })
+    if (errorTimerRef.current) window.clearTimeout(errorTimerRef.current)
+    errorTimerRef.current = window.setTimeout(() => setErrorEvent(null), 3000)
     return false
   }, [])
 
-  return { state, status, selfId, error, reaction, presence, send }
+  return {
+    state,
+    status,
+    selfId,
+    error: errorEvent?.message ?? null,
+    errorEvent,
+    reactions,
+    presence,
+    moveConfirmed,
+    undoRequested,
+    undoResult,
+    turnTimeout,
+    send,
+  }
 }

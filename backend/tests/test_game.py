@@ -1,6 +1,6 @@
 import pytest
 
-from app.game import GameError, GameState
+from app.game import TURN_DURATION_SECONDS, GameError, GameState
 from app.renju import BLACK, CENTER, WHITE
 
 
@@ -69,3 +69,49 @@ def test_resign_counts_as_opponent_win():
     assert room.winner_token == second.token
     assert room.scores[second.token] == 1
 
+
+def test_turn_deadline_is_server_based_and_expires_after_sixty_seconds():
+    room, first, _ = room_with_players()
+    snapshot = room.snapshot()
+    assert snapshot["turnDurationSeconds"] == TURN_DURATION_SECONDS == 60
+    assert snapshot["turnDeadline"] - snapshot["turnStartedAt"] == 60_000
+
+    deadline = room.turn_deadline
+    assert deadline is not None
+    assert room.expire_turn(deadline - 1) is None
+    event = room.expire_turn(deadline)
+    assert event is not None
+    assert event["playerId"] == first.public_id
+    assert room.turn == WHITE
+    assert room.turn_deadline == deadline + 60_000
+
+
+def test_move_and_reaction_events_have_unique_server_ids():
+    room, first, second = room_with_players()
+    move = room.make_move(first.token, CENTER, CENTER)
+    assert move["eventId"]
+    assert move["playerId"] == first.public_id
+
+    first.last_reaction_at = -1
+    reaction_a = room.reaction(first.token, "하품~")
+    second.last_reaction_at = -1
+    reaction_b = room.reaction(second.token, "빨리하세욧!")
+    assert reaction_a["id"] != reaction_b["id"]
+    assert reaction_a["expiresAt"] > reaction_a["createdAt"]
+
+
+def test_undo_result_has_request_and_event_ids_and_restarts_timer():
+    room, first, second = room_with_players()
+    room.make_move(first.token, CENTER, CENTER)
+    request = room.request_undo(first.token)
+    old_deadline = room.turn_deadline
+    result = room.respond_undo(second.token, True)
+    assert result["eventId"]
+    assert result["requestId"] == request["requestId"]
+    assert result["requesterId"] == first.public_id
+    assert result["responderId"] == second.public_id
+    assert result["accepted"] is True
+    assert room.board[CENTER][CENTER] is None
+    assert room.turn == BLACK
+    assert room.turn_deadline is not None
+    assert room.turn_deadline >= old_deadline

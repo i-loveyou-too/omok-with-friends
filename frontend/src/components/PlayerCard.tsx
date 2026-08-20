@@ -7,22 +7,27 @@ interface Props {
   active: boolean
   winner: boolean
   loser: boolean
-  reaction: ReactionEvent | null
+  reactions: ReactionEvent[]
   presence: PresenceEvent | null
   thinking?: boolean
   connectionIssue?: boolean
 }
 
-export function PlayerCard({ player, self, active, winner, loser, reaction, presence, thinking, connectionIssue }: Props) {
+export function PlayerCard({ player, self, active, winner, loser, reactions, presence, thinking, connectionIssue }: Props) {
   if (!player) {
     return <article className="player-card player-card--empty"><div className="waiting-dots"><i /><i /><i /></div><p>친구를 기다리는 중</p></article>
   }
   const reconnected = presence?.playerId === player.id && presence.status === 'reconnected'
   const disconnected = connectionIssue || !player.connected
   const mood = disconnected ? 'disconnected' : reconnected ? 'reconnected' : winner ? 'win' : loser ? 'lose' : thinking ? 'thinking' : active ? 'myTurn' : 'waiting'
+  const playerReactions = reactions.filter((item) => item.playerId === player.id)
+  const latestReaction = playerReactions[playerReactions.length - 1]
   return (
     <article className={`player-card ${active ? 'is-turn' : ''} ${disconnected ? 'is-offline' : ''}`}>
-      <CharacterAvatar character={player.character} mood={mood} active={active} reaction={reaction?.playerId === player.id ? reaction.value : undefined} reactionNonce={reaction?.nonce} />
+      <CharacterAvatar character={player.character} mood={mood} active={active} reaction={latestReaction?.value} reactionNonce={latestReaction?.createdAt} showReactionBubble={false} />
+      <div className="reaction-stack" aria-live="polite">
+        {playerReactions.map((item) => <span className="reaction-bubble" key={item.id}>{item.value}</span>)}
+      </div>
       <div className="player-meta">
         <div className="player-name"><b>{player.nickname}</b>{self && <span>나</span>}</div>
         <div className="stone-label"><i className={`mini-stone mini-stone--${player.color}`} />{player.color === 'black' ? '흑' : '백'}</div>

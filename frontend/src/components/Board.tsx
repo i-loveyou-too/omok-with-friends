@@ -10,6 +10,8 @@ interface Props {
   winningLine: Point[]
   disabled: boolean
   centerOnly: boolean
+  candidate: Point | null
+  candidateColor: Color | null
   onMove: (row: number, col: number) => void
 }
 
@@ -39,7 +41,7 @@ function hitStyle(row: number, col: number): CSSProperties {
   }
 }
 
-export function Board({ board, forbidden, lastMove, winningLine, disabled, centerOnly, onMove }: Props) {
+export function Board({ board, forbidden, lastMove, winningLine, disabled, centerOnly, candidate, candidateColor, onMove }: Props) {
   const [hovered, setHovered] = useState<string | null>(null)
   const banned = new Set(forbidden.map((point) => key(point.row, point.col)))
   const winning = new Set(winningLine.map((point) => key(point.row, point.col)))
@@ -55,6 +57,7 @@ export function Board({ board, forbidden, lastMove, winningLine, disabled, cente
             const pointKey = key(row, col)
             const isForbidden = banned.has(pointKey)
             const isLast = lastMove?.row === row && lastMove?.col === col
+            const isCandidate = candidate?.row === row && candidate?.col === col
             const canPlay = !disabled && !stone && !isForbidden && (!centerOnly || (row === 7 && col === 7))
             const geometry = getIntersectionGeometry(row, col)
 
@@ -69,6 +72,7 @@ export function Board({ board, forbidden, lastMove, winningLine, disabled, cente
                 style={visualStyle(row, col)}
               >
                 {stone && <span className={`stone stone--${stone}`}><i /></span>}
+                {!stone && isCandidate && candidateColor && <span className={`candidate-stone candidate-stone--${candidateColor}`} />}
                 {!stone && isForbidden && <span className="forbidden"><i /></span>}
                 {!stone && centerOnly && row === 7 && col === 7 && <span className="center-hint" />}
                 {!stone && canPlay && hovered === pointKey && <span className="hover-preview" />}
@@ -88,7 +92,7 @@ export function Board({ board, forbidden, lastMove, winningLine, disabled, cente
                 className="intersection"
                 type="button"
                 role="gridcell"
-                aria-label={`${row + 1}행 ${col + 1}열${stone ? ` ${stone === 'black' ? '흑돌' : '백돌'}` : ''}${isForbidden ? ' 금수' : ''}`}
+                aria-label={`${row + 1}행 ${col + 1}열${stone ? ` ${stone === 'black' ? '흑돌' : '백돌'}` : ''}${candidate?.row === row && candidate?.col === col ? ' 후보' : ''}${isForbidden ? ' 금수' : ''}`}
                 disabled={!canPlay}
                 key={pointKey}
                 onBlur={() => setHovered((current) => current === pointKey ? null : current)}

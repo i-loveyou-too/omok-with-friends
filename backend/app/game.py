@@ -9,7 +9,12 @@ from .renju import BLACK, BOARD_SIZE, CENTER, WHITE, Board, RenjuRuleEngine, new
 
 
 CHARACTERS = {"chiikawa", "hachiware", "momonga", "usagi"}
-REACTIONS = {"ㅋㅋㅋ", "헉!", "잠깐!!", "잘못뒀어ㅠ", "👏", "😡"}
+REACTIONS = {"ㅋㅋㅋ", "헉!", "잠깐!!", "잘못뒀어ㅠ", "하품~", "빨리하세욧!", "👏", "😡"}
+TURN_DURATION_SECONDS = 60
+
+
+def epoch_ms() -> int:
+    return int(time.time() * 1000)
 
 
 class GameError(Exception):
@@ -27,7 +32,9 @@ class PlayerState:
     character: str
     connected: bool = True
     color: Optional[str] = None
-    last_reaction_at: float = 0.0
+    # The first reaction must never be throttled, even on systems whose
+    # monotonic clock has been running for less than one second.
+    last_reaction_at: float = field(default_factory=lambda: float("-inf"))
 
     def public(self, score: int) -> dict:
         return {
@@ -63,6 +70,9 @@ class GameState:
     winner_token: Optional[str] = None
     winning_line: List[Tuple[int, int]] = field(default_factory=list)
     undo_requested_by: Optional[str] = None
+    undo_request_id: Optional[str] = None
+    turn_started_at: Optional[int] = None
+    turn_deadline: Optional[int] = None
     rematch_ready: Set[str] = field(default_factory=set)
     last_active: float = field(default_factory=time.monotonic)
 
@@ -95,6 +105,7 @@ class GameState:
         self._assign_colors()
         if len(self.player_order) == 2:
             self.status = "playing"
+            self._start_turn()
         self.last_active = time.monotonic()
         return player
 
@@ -103,10 +114,12 @@ class GameState:
             self.players[token].connected = False
             self.last_active = time.monotonic()
 
-    def make_move(self, token: str, row: int, col: int) -> None:
+    def make_move(self, token: str, row: int, col: int) -> dict:
         player = self._player(token)
         if self.status != "playing":
             raise GameError("game_not_playing", "지금은 돌을 놓을 수 없어요.")
+        if self.turn_deadline is not None and epoch_ms() >= self.turn_deadline:
+            raise GameError("turn_expired", "제한시간이 지나 차례가 넘어갔어요.")
         if player.color != self.turn:
             raise GameError("wrong_turn", "상대 차례예요.")
         if not self.engine.inside(row, col):
@@ -123,44 +136,71 @@ class GameState:
         self.board[row][col] = player.color
         self.moves.append(Move(row, col, player.color, token))
         self.undo_requested_by = None
+        self.undo_request_id = None
         winning = self.engine.winning_line(self.board, row, col, player.color)
         if winning:
             self.status = "finished"
             self.winner_token = token
             self.winning_line = winning
             self.scores[token] += 1
+            self._stop_turn()
         elif len(self.moves) == BOARD_SIZE * BOARD_SIZE:
             self.status = "draw"
+            self._stop_turn()
         else:
             self.turn = WHITE if self.turn == BLACK else BLACK
+            self._start_turn()
         self.last_active = time.monotonic()
+        return self._event(
+            playerId=player.public_id,
+            row=row,
+            col=col,
+            color=player.color,
+        )
 
-    def request_undo(self, token: str) -> None:
-        self._player(token)
+    def request_undo(self, token: str) -> dict:
+        player = self._player(token)
         if self.status != "playing" or not self.moves:
             raise GameError("undo_unavailable", "지금은 무르기를 요청할 수 없어요.")
         if self.undo_requested_by:
             raise GameError("undo_pending", "이미 무르기 응답을 기다리고 있어요.")
         self.undo_requested_by = token
+        self.undo_request_id = secrets.token_hex(8)
         self.last_active = time.monotonic()
+        return {
+            "requestId": self.undo_request_id,
+            "roomId": self.room_code,
+            "playerId": player.public_id,
+            "serverTimestamp": epoch_ms(),
+        }
 
-    def respond_undo(self, token: str, accept: bool) -> None:
-        self._player(token)
+    def respond_undo(self, token: str, accept: bool) -> dict:
+        responder = self._player(token)
         requester = self.undo_requested_by
+        request_id = self.undo_request_id
         if not requester:
             raise GameError("no_undo_request", "대기 중인 무르기 요청이 없어요.")
         if requester == token:
             raise GameError("self_undo_response", "상대가 응답해야 해요.")
         self.undo_requested_by = None
+        self.undo_request_id = None
         if not accept:
-            return
-        move = self.moves.pop()
-        self.board[move.row][move.col] = None
-        self.turn = move.color
-        self.winner_token = None
-        self.winning_line = []
-        self.status = "playing"
+            self.last_active = time.monotonic()
+        else:
+            move = self.moves.pop()
+            self.board[move.row][move.col] = None
+            self.turn = move.color
+            self.winner_token = None
+            self.winning_line = []
+            self.status = "playing"
+            self._start_turn()
         self.last_active = time.monotonic()
+        return self._event(
+            requestId=request_id,
+            requesterId=self.players[requester].public_id,
+            responderId=responder.public_id,
+            accepted=accept,
+        )
 
     def resign(self, token: str) -> None:
         self._player(token)
@@ -173,6 +213,8 @@ class GameState:
         self.winner_token = opponent
         self.scores[opponent] += 1
         self.undo_requested_by = None
+        self.undo_request_id = None
+        self._stop_turn()
         self.last_active = time.monotonic()
 
     def request_rematch(self, token: str) -> bool:
@@ -195,7 +237,35 @@ class GameState:
             raise GameError("reaction_cooldown", "리액션은 잠시 뒤 다시 보내 주세요.")
         player.last_reaction_at = now
         self.last_active = now
-        return {"playerId": player.public_id, "value": value}
+        created_at = epoch_ms()
+        return {
+            "id": secrets.token_hex(8),
+            "roomId": self.room_code,
+            "playerId": player.public_id,
+            "value": value,
+            "createdAt": created_at,
+            "expiresAt": created_at + 2800,
+            "serverTimestamp": created_at,
+        }
+
+    def expire_turn(self, now_ms: Optional[int] = None) -> Optional[dict]:
+        now_ms = now_ms if now_ms is not None else epoch_ms()
+        if self.status != "playing" or self.turn_deadline is None or now_ms < self.turn_deadline:
+            return None
+        expired_color = self.turn
+        expired_token = next(
+            (token for token in self.player_order if self.players[token].color == expired_color),
+            None,
+        )
+        self.turn = WHITE if self.turn == BLACK else BLACK
+        self.undo_requested_by = None
+        self.undo_request_id = None
+        self._start_turn(now_ms)
+        self.last_active = time.monotonic()
+        return self._event(
+            playerId=self.players[expired_token].public_id if expired_token else None,
+            expiredColor=expired_color,
+        )
 
     def snapshot(self) -> dict:
         forbidden = []
@@ -221,10 +291,32 @@ class GameState:
             "undoRequestedBy": (
                 self.players[self.undo_requested_by].public_id if self.undo_requested_by else None
             ),
+            "undoRequestId": self.undo_request_id,
             "rematchReady": [self.players[token].public_id for token in self.rematch_ready],
             "firstMoveCenterOnly": not self.moves,
             "forbidden": forbidden,
+            "turnDurationSeconds": TURN_DURATION_SECONDS,
+            "turnStartedAt": self.turn_started_at,
+            "turnDeadline": self.turn_deadline,
+            "serverNow": epoch_ms(),
         }
+
+    def _event(self, **payload: object) -> dict:
+        return {
+            "eventId": secrets.token_hex(8),
+            "roomId": self.room_code,
+            "serverTimestamp": epoch_ms(),
+            **payload,
+        }
+
+    def _start_turn(self, now_ms: Optional[int] = None) -> None:
+        now_ms = now_ms if now_ms is not None else epoch_ms()
+        self.turn_started_at = now_ms
+        self.turn_deadline = now_ms + TURN_DURATION_SECONDS * 1000
+
+    def _stop_turn(self) -> None:
+        self.turn_started_at = None
+        self.turn_deadline = None
 
     def _player(self, token: str) -> PlayerState:
         try:
@@ -247,5 +339,7 @@ class GameState:
         self.winner_token = None
         self.winning_line = []
         self.undo_requested_by = None
+        self.undo_request_id = None
         self.rematch_ready.clear()
         self._assign_colors()
+        self._start_turn()

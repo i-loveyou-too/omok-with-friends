@@ -31,9 +31,14 @@ export interface GameState {
   winningLine: Point[]
   winnerId: string | null
   undoRequestedBy: string | null
+  undoRequestId: string | null
   rematchReady: string[]
   firstMoveCenterOnly: boolean
   forbidden: ForbiddenPoint[]
+  turnDurationSeconds: number
+  turnStartedAt: number | null
+  turnDeadline: number | null
+  serverNow: number
 }
 
 export interface Profile {
@@ -49,8 +54,51 @@ export interface Session extends Profile {
 }
 
 export interface ReactionEvent {
+  id: string
+  roomId: string
   playerId: string
   value: string
+  createdAt: number
+  expiresAt: number
+  serverTimestamp: number
+}
+
+export interface MoveConfirmedEvent extends Point {
+  eventId: string
+  roomId: string
+  playerId: string
+  color: Color
+  serverTimestamp: number
+}
+
+export interface UndoRequestEvent {
+  requestId: string
+  roomId: string
+  playerId: string
+  serverTimestamp: number
+}
+
+export interface UndoResultEvent {
+  eventId: string
+  requestId: string
+  roomId: string
+  requesterId: string
+  responderId: string
+  accepted: boolean
+  serverTimestamp: number
+}
+
+export interface TurnTimeoutEvent {
+  eventId: string
+  roomId: string
+  playerId: string | null
+  expiredColor: Color
+  serverTimestamp: number
+}
+
+export interface GameErrorEvent {
+  code: string
+  message: string
   nonce: number
 }
 

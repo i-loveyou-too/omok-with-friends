@@ -23,12 +23,25 @@ from .rooms import room_manager
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    async def cleanup_rooms() -> None:
+    async def maintain_rooms() -> None:
+        cleanup_ticks = 0
         while True:
-            await asyncio.sleep(60)
-            room_manager.cleanup()
+            await asyncio.sleep(0.25)
+            cleanup_ticks += 1
+            for room in list(room_manager.rooms.values()):
+                timeout_event = room.expire_turn()
+                if timeout_event:
+                    await room_manager.connections.broadcast(
+                        room.room_code, {"type": "game_state", "state": room.snapshot()}
+                    )
+                    await room_manager.connections.broadcast(
+                        room.room_code, {"type": "turn_timeout", **timeout_event}
+                    )
+            if cleanup_ticks >= 240:
+                cleanup_ticks = 0
+                room_manager.cleanup()
 
-    cleanup_task = asyncio.create_task(cleanup_rooms())
+    cleanup_task = asyncio.create_task(maintain_rooms())
     try:
         yield
     finally:
@@ -112,7 +125,14 @@ async def room_socket(websocket: WebSocket, room_code: str) -> None:
                 if isinstance(message, JoinMessage):
                     raise GameError("already_joined", "이미 입장했어요.")
                 if isinstance(message, MoveMessage):
-                    room.make_move(token, message.row, message.col)
+                    move_event = room.make_move(token, message.row, message.col)
+                    await room_manager.connections.broadcast(
+                        room.room_code, {"type": "game_state", "state": room.snapshot()}
+                    )
+                    await room_manager.connections.broadcast(
+                        room.room_code, {"type": "move_confirmed", **move_event}
+                    )
+                    continue
                 elif isinstance(message, ReactionMessage):
                     reaction = room.reaction(token, message.value)
                     await room_manager.connections.broadcast(
@@ -120,10 +140,24 @@ async def room_socket(websocket: WebSocket, room_code: str) -> None:
                     )
                     continue
                 elif isinstance(message, UndoResponseMessage):
-                    room.respond_undo(token, message.accept)
+                    undo_result = room.respond_undo(token, message.accept)
+                    await room_manager.connections.broadcast(
+                        room.room_code, {"type": "game_state", "state": room.snapshot()}
+                    )
+                    await room_manager.connections.broadcast(
+                        room.room_code, {"type": "undo_result", **undo_result}
+                    )
+                    continue
                 elif isinstance(message, SimpleMessage):
                     if message.type == "undo_request":
-                        room.request_undo(token)
+                        undo_request = room.request_undo(token)
+                        await room_manager.connections.broadcast(
+                            room.room_code, {"type": "game_state", "state": room.snapshot()}
+                        )
+                        await room_manager.connections.broadcast(
+                            room.room_code, {"type": "undo_requested", **undo_request}
+                        )
+                        continue
                     elif message.type == "rematch_request":
                         room.request_rematch(token)
                     elif message.type == "resign":
@@ -163,12 +197,13 @@ async def room_socket(websocket: WebSocket, room_code: str) -> None:
         await websocket.close(code=4000)
     finally:
         if token and room:
-            room_manager.connections.disconnect(room.room_code, token, websocket)
-            room.disconnect(token)
-            await room_manager.connections.broadcast(
-                room.room_code,
-                {"type": "presence", "playerId": room.players[token].public_id, "status": "disconnected"},
-            )
-            await room_manager.connections.broadcast(
-                room.room_code, {"type": "game_state", "state": room.snapshot()}
-            )
+            disconnected_current = room_manager.connections.disconnect(room.room_code, token, websocket)
+            if disconnected_current:
+                room.disconnect(token)
+                await room_manager.connections.broadcast(
+                    room.room_code,
+                    {"type": "presence", "playerId": room.players[token].public_id, "status": "disconnected"},
+                )
+                await room_manager.connections.broadcast(
+                    room.room_code, {"type": "game_state", "state": room.snapshot()}
+                )

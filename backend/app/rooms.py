@@ -27,12 +27,16 @@ class ConnectionManager:
                 pass
         self.connections[room_code][token] = websocket
 
-    def disconnect(self, room_code: str, token: str, websocket: WebSocket) -> None:
+    def disconnect(self, room_code: str, token: str, websocket: WebSocket) -> bool:
         room = self.connections.get(room_code)
         if room and room.get(token) is websocket:
             room.pop(token, None)
+            removed = True
+        else:
+            removed = False
         if room == {}:
             self.connections.pop(room_code, None)
+        return removed
 
     async def send(self, websocket: WebSocket, payload: dict) -> None:
         await websocket.send_json(payload)
@@ -86,4 +90,3 @@ class RoomManager:
 
 
 room_manager = RoomManager()
-
