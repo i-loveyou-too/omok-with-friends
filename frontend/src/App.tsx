@@ -5,7 +5,7 @@ import { Lobby } from './components/Lobby'
 import { ProfileForm } from './components/ProfileForm'
 import type { Profile, Session } from './types'
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '/omok/api'
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '/omokwithfriend/api'
 
 function roomFromPath(): { roomCode: string | null; invalidRoomPath: boolean } {
   const match = location.pathname.match(/\/omok\/room\/([^/?#]+)/i)
@@ -65,14 +65,14 @@ export default function App() {
   }, [route.invalidRoomPath, roomCode])
 
   const enterRoom = (code: string) => {
-    history.pushState({}, '', `/omok/room/${code}`)
+    history.pushState({}, '', `/omokwithfriend/room/${code}`)
     setRoute({ roomCode: code, invalidRoomPath: false })
     setRoomMissing(false)
     setProfile(savedSession(code))
   }
 
   const goHome = () => {
-    history.pushState({}, '', '/omok/')
+    history.pushState({}, '', '/omokwithfriend/')
     setRoute({ roomCode: null, invalidRoomPath: false })
     setRoomMissing(false)
     setProfile(null)
