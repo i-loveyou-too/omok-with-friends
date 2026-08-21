@@ -4,6 +4,7 @@ import type {
   GameErrorEvent,
   GameState,
   MoveConfirmedEvent,
+  PlayerAwakenedEvent,
   PresenceEvent,
   Profile,
   ReactionEvent,
@@ -18,6 +19,7 @@ type ServerMessage =
   | { type: 'game_state'; state: GameState }
   | ({ type: 'reaction' } & ReactionEvent)
   | ({ type: 'move_confirmed' } & MoveConfirmedEvent)
+  | ({ type: 'player_awakened' } & PlayerAwakenedEvent)
   | ({ type: 'undo_requested' } & UndoRequestEvent)
   | ({ type: 'undo_result' } & UndoResultEvent)
   | ({ type: 'turn_timeout' } & TurnTimeoutEvent)
@@ -25,11 +27,13 @@ type ServerMessage =
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' }
 
+const APP_BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
+
 function websocketUrl(roomCode: string) {
   const configured = import.meta.env.VITE_WS_URL as string | undefined
   if (configured) return `${configured.replace(/\/$/, '')}/rooms/${roomCode}`
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${location.host}/omokwithfriend/ws/rooms/${roomCode}`
+  return `${protocol}//${location.host}${APP_BASE}/ws/rooms/${roomCode}`
 }
 
 export function useGameSocket(
@@ -52,6 +56,7 @@ export function useGameSocket(
   const [reactions, setReactions] = useState<ReactionEvent[]>([])
   const [presence, setPresence] = useState<PresenceEvent | null>(null)
   const [moveConfirmed, setMoveConfirmed] = useState<MoveConfirmedEvent | null>(null)
+  const [playerAwakened, setPlayerAwakened] = useState<PlayerAwakenedEvent | null>(null)
   const [undoRequested, setUndoRequested] = useState<UndoRequestEvent | null>(null)
   const [undoResult, setUndoResult] = useState<UndoResultEvent | null>(null)
   const [turnTimeout, setTurnTimeout] = useState<TurnTimeoutEvent | null>(null)
@@ -66,6 +71,7 @@ export function useGameSocket(
     seenEventIdsRef.current.clear()
     setReactions([])
     setMoveConfirmed(null)
+    setPlayerAwakened(null)
     setUndoRequested(null)
     setUndoResult(null)
     setTurnTimeout(null)
@@ -121,6 +127,8 @@ export function useGameSocket(
           }, lifetime))
         } else if (message.type === 'move_confirmed') {
           if (acceptEvent(message.eventId)) setMoveConfirmed(message)
+        } else if (message.type === 'player_awakened') {
+          if (acceptEvent(message.eventId)) setPlayerAwakened(message)
         } else if (message.type === 'undo_requested') {
           if (acceptEvent(message.requestId)) setUndoRequested(message)
         } else if (message.type === 'undo_result') {
@@ -187,6 +195,7 @@ export function useGameSocket(
     reactions,
     presence,
     moveConfirmed,
+    playerAwakened,
     undoRequested,
     undoResult,
     turnTimeout,

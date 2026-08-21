@@ -5,6 +5,7 @@ from app.rooms import room_manager
 
 
 client = TestClient(app)
+BASE = "/omokwithfriend"
 
 
 def setup_function():
@@ -13,18 +14,18 @@ def setup_function():
 
 
 def test_create_room_and_two_player_websocket_game():
-    response = client.post("/omok/api/rooms")
+    response = client.post(f"{BASE}/api/rooms")
     assert response.status_code == 201
     code = response.json()["roomCode"]
 
-    with client.websocket_connect(f"/omok/ws/rooms/{code}") as first:
+    with client.websocket_connect(f"{BASE}/ws/rooms/{code}") as first:
         first.send_json({"type": "join", "nickname": "A", "character": "chiikawa"})
         joined_a = first.receive_json()
         assert joined_a["type"] == "joined"
         waiting = first.receive_json()
         assert waiting["state"]["status"] == "waiting"
 
-        with client.websocket_connect(f"/omok/ws/rooms/{code}") as second:
+        with client.websocket_connect(f"{BASE}/ws/rooms/{code}") as second:
             second.send_json({"type": "join", "nickname": "B", "character": "usagi"})
             joined_b = second.receive_json()
             assert joined_b["type"] == "joined"
@@ -56,6 +57,16 @@ def test_create_room_and_two_player_websocket_game():
             assert other_reaction_a["id"] == other_reaction_b["id"]
             assert other_reaction_a["id"] != reaction_a["id"]
 
+            first.send_json({"type": "spicy_curry"})
+            awaken_state_a = first.receive_json()
+            awaken_state_b = second.receive_json()
+            awakened_a = first.receive_json()
+            awakened_b = second.receive_json()
+            assert joined_a["playerId"] in awaken_state_a["state"]["awakenedPlayers"]
+            assert joined_a["playerId"] in awaken_state_b["state"]["awakenedPlayers"]
+            assert awakened_a["type"] == awakened_b["type"] == "player_awakened"
+            assert awakened_a["playerId"] == joined_a["playerId"]
+
             first.send_json({"type": "undo_request"})
             undo_state_a = first.receive_json()
             undo_state_b = second.receive_json()
@@ -79,6 +90,6 @@ def test_create_room_and_two_player_websocket_game():
 
 
 def test_missing_room_status_returns_not_found():
-    response = client.get("/omok/api/rooms/ZZZZZ")
+    response = client.get(f"{BASE}/api/rooms/ZZZZZ")
     assert response.status_code == 404
     assert response.json()["code"] == "room_not_found"

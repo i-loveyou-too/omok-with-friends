@@ -100,6 +100,21 @@ def test_move_and_reaction_events_have_unique_server_ids():
     assert reaction_a["expiresAt"] > reaction_a["createdAt"]
 
 
+def test_spicy_curry_awaken_persists_for_current_game_and_resets_on_rematch():
+    room, first, second = room_with_players()
+    room.make_move(first.token, CENTER, CENTER)
+    event = room.awaken(first.token)
+    assert event["playerId"] == first.public_id
+    assert room.snapshot()["awakenedPlayers"] == [first.public_id]
+    assert_error("already_awakened", lambda: room.awaken(first.token))
+
+    room.resign(second.token)
+    assert room.snapshot()["awakenedPlayers"] == [first.public_id]
+    assert room.request_rematch(first.token) is False
+    assert room.request_rematch(second.token) is True
+    assert room.snapshot()["awakenedPlayers"] == []
+
+
 def test_server_rejects_white_forbidden_move():
     room, first, second = room_with_players()
     room.board[CENTER][CENTER] = BLACK

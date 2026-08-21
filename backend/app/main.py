@@ -160,6 +160,15 @@ async def room_socket(websocket: WebSocket, room_code: str) -> None:
                         continue
                     elif message.type == "rematch_request":
                         room.request_rematch(token)
+                    elif message.type == "spicy_curry":
+                        awaken_event = room.awaken(token)
+                        await room_manager.connections.broadcast(
+                            room.room_code, {"type": "game_state", "state": room.snapshot()}
+                        )
+                        await room_manager.connections.broadcast(
+                            room.room_code, {"type": "player_awakened", **awaken_event}
+                        )
+                        continue
                     elif message.type == "resign":
                         room.resign(token)
                     elif message.type == "leave":

@@ -12,6 +12,7 @@ export type CharacterMood =
   | 'reconnected'
 
 export type ReactionKind = 'laugh' | 'surprised' | 'wait' | 'mistake' | 'clap' | 'angry'
+export type TemporaryCharacterReaction = 'yawn' | null
 
 export interface CharacterAsset {
   id: CharacterId
@@ -20,19 +21,31 @@ export interface CharacterAsset {
   theme: 'pink' | 'sky' | 'lilac' | 'yellow'
   poses: Record<CharacterMood, string>
   reactions: Record<ReactionKind, string>
+  special: {
+    yawn: string
+    awakened: string
+    hasAwakenedAsset: boolean
+  }
 }
 
-const sprites = import.meta.glob<string>('./*/*.webp', {
+const sprites = import.meta.glob<string>('./*/*.{webp,png}', {
   eager: true,
   query: '?url',
   import: 'default',
 })
 
 function sprite(character: CharacterId, name: string) {
-  const path = `./${character}/${name}.webp`
+  const path = [`./${character}/${name}.webp`, `./${character}/${name}.png`]
+    .find((candidate) => sprites[candidate])
+  if (!path) throw new Error(`Missing final character asset: ${character}/${name}`)
   const url = sprites[path]
-  if (!url) throw new Error(`Missing final character asset: ${path}`)
   return url
+}
+
+function optionalSprite(character: CharacterId, name: string) {
+  const path = [`./${character}/${name}.webp`, `./${character}/${name}.png`]
+    .find((candidate) => sprites[candidate])
+  return path ? sprites[path] : null
 }
 
 function character(
@@ -65,6 +78,11 @@ function character(
       clap: sprite(id, 'reaction-clap'),
       angry: sprite(id, 'reaction-angry'),
     },
+    special: {
+      yawn: sprite(id, 'reaction-yawn'),
+      awakened: optionalSprite(id, 'spicy-awakened') ?? sprite(id, 'reaction-angry'),
+      hasAwakenedAsset: Boolean(optionalSprite(id, 'spicy-awakened')),
+    },
   }
 }
 
@@ -84,12 +102,42 @@ export const reactionKindByValue: Record<string, ReactionKind> = {
   '😡': 'angry',
 }
 
+interface DisplayedCharacterAssetOptions {
+  character: CharacterId
+  mood: CharacterMood
+  temporaryReaction?: TemporaryCharacterReaction
+  awakened?: boolean
+}
+
+export function getDisplayedCharacterAsset({
+  character,
+  mood,
+  temporaryReaction = null,
+  awakened = false,
+}: DisplayedCharacterAssetOptions) {
+  const config = characterAssets[character]
+  if (temporaryReaction === 'yawn') {
+    return { src: config.special.yawn, stateLabel: 'yawn', awakenedFallback: false }
+  }
+  if (awakened) {
+    return {
+      src: config.special.awakened,
+      stateLabel: 'spicy-awakened',
+      awakenedFallback: !config.special.hasAwakenedAsset,
+    }
+  }
+  return { src: config.poses[mood], stateLabel: mood, awakenedFallback: false }
+}
+
 export function preloadCharacterAssets(characterIds: CharacterId[]) {
   const urls = new Set<string>()
   for (const id of characterIds) {
     const config = characterAssets[id]
     Object.values(config.poses).forEach((url) => urls.add(url))
     Object.values(config.reactions).forEach((url) => urls.add(url))
+    Object.values(config.special).forEach((url) => {
+      if (typeof url === 'string') urls.add(url)
+    })
   }
   for (const url of urls) {
     const image = new Image()

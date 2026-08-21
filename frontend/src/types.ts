@@ -9,6 +9,7 @@ export interface Player {
   connected: boolean
   color: Color | null
   score: number
+  awakened: boolean
 }
 
 export interface Point {
@@ -27,6 +28,7 @@ export interface GameState {
   turn: Color
   board: Array<Array<Color | null>>
   players: Player[]
+  awakenedPlayers: string[]
   lastMove: Point | null
   winningLine: Point[]
   winnerId: string | null
@@ -93,6 +95,13 @@ export interface TurnTimeoutEvent {
   roomId: string
   playerId: string | null
   expiredColor: Color
+  serverTimestamp: number
+}
+
+export interface PlayerAwakenedEvent {
+  eventId: string
+  roomId: string
+  playerId: string
   serverTimestamp: number
 }
 

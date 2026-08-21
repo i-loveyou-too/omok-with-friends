@@ -28,7 +28,7 @@ class ReactionMessage(StrictMessage):
 
 
 class SimpleMessage(StrictMessage):
-    type: Literal["undo_request", "rematch_request", "resign", "leave", "ping"]
+    type: Literal["undo_request", "rematch_request", "spicy_curry", "resign", "leave", "ping"]
 
 
 class UndoResponseMessage(StrictMessage):
@@ -38,4 +38,3 @@ class UndoResponseMessage(StrictMessage):
 
 ClientMessage = Union[JoinMessage, MoveMessage, ReactionMessage, SimpleMessage, UndoResponseMessage]
 client_message_adapter = TypeAdapter(ClientMessage)
-

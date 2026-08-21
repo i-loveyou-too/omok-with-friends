@@ -36,7 +36,7 @@ class PlayerState:
     # monotonic clock has been running for less than one second.
     last_reaction_at: float = field(default_factory=lambda: float("-inf"))
 
-    def public(self, score: int) -> dict:
+    def public(self, score: int, awakened: bool = False) -> dict:
         return {
             "id": self.public_id,
             "nickname": self.nickname,
@@ -44,6 +44,7 @@ class PlayerState:
             "connected": self.connected,
             "color": self.color,
             "score": score,
+            "awakened": awakened,
         }
 
 
@@ -73,6 +74,7 @@ class GameState:
     undo_request_id: Optional[str] = None
     turn_started_at: Optional[int] = None
     turn_deadline: Optional[int] = None
+    awakened_players: Set[str] = field(default_factory=set)
     rematch_ready: Set[str] = field(default_factory=set)
     last_active: float = field(default_factory=time.monotonic)
 
@@ -247,6 +249,16 @@ class GameState:
             "serverTimestamp": created_at,
         }
 
+    def awaken(self, token: str) -> dict:
+        player = self._player(token)
+        if self.status != "playing":
+            raise GameError("awaken_unavailable", "대국 중에만 매운카레를 사용할 수 있어요.")
+        if token in self.awakened_players:
+            raise GameError("already_awakened", "이미 각성 중이에요.")
+        self.awakened_players.add(token)
+        self.last_active = time.monotonic()
+        return self._event(playerId=player.public_id)
+
     def expire_turn(self, now_ms: Optional[int] = None) -> Optional[dict]:
         now_ms = now_ms if now_ms is not None else epoch_ms()
         if self.status != "playing" or self.turn_deadline is None or now_ms < self.turn_deadline:
@@ -279,7 +291,13 @@ class GameState:
             "status": self.status,
             "turn": self.turn,
             "board": self.board,
-            "players": [self.players[token].public(self.scores[token]) for token in self.player_order],
+            "players": [
+                self.players[token].public(self.scores[token], token in self.awakened_players)
+                for token in self.player_order
+            ],
+            "awakenedPlayers": [
+                self.players[token].public_id for token in self.awakened_players if token in self.players
+            ],
             "lastMove": (
                 {"row": self.moves[-1].row, "col": self.moves[-1].col}
                 if self.moves
@@ -339,6 +357,7 @@ class GameState:
         self.winning_line = []
         self.undo_requested_by = None
         self.undo_request_id = None
+        self.awakened_players.clear()
         self.rematch_ready.clear()
         self._assign_colors()
         self._start_turn()

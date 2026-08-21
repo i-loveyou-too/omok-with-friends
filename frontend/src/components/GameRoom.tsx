@@ -12,6 +12,7 @@ import { ResultPanel } from './ResultPanel'
 
 const REACTIONS = ['ㅋㅋㅋ', '헉!', '잠깐!!', '잘못뒀어ㅠ', '하품~', '빨리하세욧!', '👏', '😡']
 const MOVE_ERROR_CODES = new Set(['occupied', 'wrong_turn', 'forbidden', 'first_move_center', 'game_not_playing', 'turn_expired'])
+const APP_BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 interface Props {
   roomCode: string
@@ -37,7 +38,7 @@ function connectionLabel(status: string) {
 export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing }: Props) {
   const {
     state, status, selfId, error, errorEvent, reactions, presence,
-    moveConfirmed, undoRequested, undoResult, turnTimeout, send,
+    moveConfirmed, playerAwakened, undoRequested, undoResult, turnTimeout, send,
   } = useGameSocket(roomCode, profile, onSession, onRoomMissing)
   const { muted, needsGesture, startBgm, toggleMute, playEffect } = useGameAudio()
   const [copied, setCopied] = useState(false)
@@ -45,6 +46,7 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
   const [candidate, setCandidate] = useState<Point | null>(null)
   const [moveSubmitting, setMoveSubmitting] = useState(false)
   const [undoResponding, setUndoResponding] = useState(false)
+  const [spicySubmitting, setSpicySubmitting] = useState(false)
   const [resultAction, setResultAction] = useState<'rematch' | 'home' | null>(null)
   const [systemNotice, setSystemNotice] = useState<{ id: string; text: string } | null>(null)
   const noticeTimerRef = useRef<number | undefined>(undefined)
@@ -52,6 +54,7 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
   const self = state?.players.find((player) => player.id === selfId)
   const opponent = state?.players.find((player) => player.id !== selfId)
   const selfTurn = state?.status === 'playing' && self?.color === state.turn
+  const selfAwakened = Boolean(self?.awakened)
   const winner = state?.winnerId ? state.players.find((player) => player.id === state.winnerId) : null
   const ended = state?.status === 'finished' || state?.status === 'draw'
   const remainingSeconds = useTurnCountdown(state?.turnDeadline, state?.serverNow)
@@ -102,6 +105,14 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
   }, [moveConfirmed, playEffect, selfId])
 
   useEffect(() => {
+    if (!playerAwakened) return
+    showSystemNotice(
+      playerAwakened.eventId,
+      playerAwakened.playerId === selfId ? '🔥 매운카레 각성!' : '상대가 매운카레로 각성했어요!'
+    )
+  }, [playerAwakened, selfId])
+
+  useEffect(() => {
     if (!undoRequested || undoRequested.playerId === selfId) return
     playEffect('undoRequest', `undo-request:${undoRequested.requestId}`)
   }, [undoRequested, playEffect, selfId])
@@ -132,20 +143,30 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
     setCandidate(null)
     setMoveSubmitting(false)
     setResultAction(null)
+    setSpicySubmitting(false)
   }, [state?.gameNumber, state?.turn, state?.status, state?.lastMove?.row, state?.lastMove?.col, state?.undoRequestId])
 
   useEffect(() => {
     if (!errorEvent) return
     setMoveSubmitting(false)
+    setSpicySubmitting(false)
     if (MOVE_ERROR_CODES.has(errorEvent.code)) setCandidate(null)
   }, [errorEvent])
+
+  useEffect(() => {
+    if (selfAwakened || status !== 'connected' || state?.status !== 'playing') setSpicySubmitting(false)
+  }, [selfAwakened, status, state?.status])
 
   useEffect(() => {
     if (!state?.undoRequestedBy) setUndoResponding(false)
   }, [state?.undoRequestedBy])
 
   const copyInvite = async () => {
+<<<<<<< HEAD
     await navigator.clipboard.writeText(`${location.origin}/omokwithfriend/room/${roomCode}`)
+=======
+    await navigator.clipboard.writeText(`${location.origin}${APP_BASE}/room/${roomCode}`)
+>>>>>>> 5041e0d (feat: add spicy curry awakening and yawn reactions)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1800)
   }
@@ -155,6 +176,11 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
     if (now - lastReactionAt < 1000) return
     setLastReactionAt(now)
     send({ type: 'reaction', value })
+  }
+
+  const useSpicyCurry = () => {
+    if (state?.status !== 'playing' || selfAwakened || spicySubmitting || status !== 'connected') return
+    if (send({ type: 'spicy_curry' })) setSpicySubmitting(true)
   }
 
   const confirmMove = () => {
@@ -231,6 +257,7 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
   const undoFromOpponent = Boolean(state.undoRequestedBy && !undoIsMine)
   const rematchMine = Boolean(selfId && state.rematchReady.includes(selfId))
   const boardDisabled = !selfTurn || status !== 'connected' || moveSubmitting || ended
+  const spicyCurryDisabled = state.status !== 'playing' || selfAwakened || spicySubmitting || status !== 'connected'
   const resultPanel = ended && self ? (
     <ResultPanel
       result={state.status === 'draw' ? 'draw' : winner?.id === selfId ? 'win' : 'lose'}
@@ -294,6 +321,7 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
         {!ended && (
           <aside className="action-panel">
             <div className="reaction-box"><h2>한마디 톡!</h2><div>{REACTIONS.map((item) => <button key={item} onClick={() => sendReaction(item)}>{item}</button>)}</div></div>
+            <button className="spicy-curry-button" disabled={spicyCurryDisabled} onClick={useSpicyCurry}>{selfAwakened ? '🔥 각성중' : spicySubmitting ? '🔥 각성 중…' : '🌶️ 매운카레'}</button>
             <div className="utility-actions">
               <button disabled={state.status !== 'playing' || undoIsMine || status !== 'connected'} onClick={() => send({ type: 'undo_request' })}>{undoIsMine ? '응답 기다리는 중…' : '↶ 무르기 요청'}</button>
               <button className="danger" disabled={state.status !== 'playing'} onClick={() => { if (confirm('정말 기권할까요? 상대에게 1승이 주어져요.')) send({ type: 'resign' }) }}>⚑ 기권</button>
@@ -306,6 +334,7 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
       {!ended && (
         <section className="mobile-actions">
           <div className="mobile-reactions">{REACTIONS.map((item) => <button key={item} onClick={() => sendReaction(item)}>{item}</button>)}</div>
+          <button className="spicy-curry-button" disabled={spicyCurryDisabled} onClick={useSpicyCurry}>{selfAwakened ? '🔥 각성중' : spicySubmitting ? '🔥 각성 중…' : '🌶️ 매운카레'}</button>
           <div className="utility-actions"><button disabled={state.status !== 'playing' || undoIsMine || status !== 'connected'} onClick={() => send({ type: 'undo_request' })}>↶ 무르기</button><button className="danger" disabled={state.status !== 'playing'} onClick={() => { if (confirm('정말 기권할까요?')) send({ type: 'resign' }) }}>⚑ 기권</button></div>
         </section>
       )}

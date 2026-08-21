@@ -22,9 +22,10 @@ export function PlayerCard({ player, self, active, winner, loser, reactions, pre
   const mood = disconnected ? 'disconnected' : reconnected ? 'reconnected' : winner ? 'win' : loser ? 'lose' : thinking ? 'thinking' : active ? 'myTurn' : 'waiting'
   const playerReactions = reactions.filter((item) => item.playerId === player.id)
   const latestReaction = playerReactions[playerReactions.length - 1]
+  const latestYawn = playerReactions.filter((item) => item.value === '하품~').at(-1)
   return (
-    <article className={`player-card ${active ? 'is-turn' : ''} ${disconnected ? 'is-offline' : ''}`}>
-      <CharacterAvatar character={player.character} mood={mood} active={active} reaction={latestReaction?.value} reactionNonce={latestReaction?.createdAt} showReactionBubble={false} />
+    <article className={`player-card ${active ? 'is-turn' : ''} ${player.awakened ? 'is-awakened' : ''} ${disconnected ? 'is-offline' : ''}`}>
+      <CharacterAvatar character={player.character} mood={mood} active={active} awakened={player.awakened} temporaryReaction={latestYawn ? 'yawn' : null} reaction={latestReaction?.value} reactionNonce={latestReaction?.createdAt} showReactionBubble={false} />
       <div className="reaction-stack" aria-live="polite">
         {playerReactions.map((item) => <span className="reaction-bubble" key={item.id}>{item.value}</span>)}
       </div>
@@ -34,6 +35,7 @@ export function PlayerCard({ player, self, active, winner, loser, reactions, pre
       </div>
       {disconnected && <span className="offline-label">연결 끊김…</span>}
       {reconnected && <span className="reconnected-label">다시 왔어요!</span>}
+      {player.awakened && <span className="awakened-label">🔥 각성중</span>}
     </article>
   )
 }
