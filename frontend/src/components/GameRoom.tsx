@@ -162,11 +162,7 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
   }, [state?.undoRequestedBy])
 
   const copyInvite = async () => {
-<<<<<<< HEAD
-    await navigator.clipboard.writeText(`${location.origin}/omokwithfriend/room/${roomCode}`)
-=======
     await navigator.clipboard.writeText(`${location.origin}${APP_BASE}/room/${roomCode}`)
->>>>>>> 5041e0d (feat: add spicy curry awakening and yawn reactions)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1800)
   }
