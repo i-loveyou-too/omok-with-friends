@@ -52,4 +52,68 @@ export interface ReactionEvent {
   playerId: string
   value: string
   nonce: number
+  id?: string
+  roomId?: string
+  createdAt?: number
+  expiresAt?: number
+  serverTimestamp?: number
+}
+
+export interface GameErrorEvent {
+  code: string
+  message: string
+  nonce: number
+}
+
+export interface PresenceEvent {
+  playerId: string
+  status: 'disconnected' | 'reconnected'
+  nonce: number
+}
+
+export interface SecretCardPlayer {
+  id: string
+  nickname: string
+  character: CharacterId
+  connected: boolean
+  chips: number
+  score: number
+  roundWins: number
+  stats: { raises: number; folds: number; allIns: number }
+}
+
+export type SecretCardStatus = 'waiting' | 'playing' | 'round_finished' | 'game_finished' | 'finished'
+export type SecretCardAction = 'check' | 'call' | 'raise' | 'fold' | 'all_in'
+
+export interface SecretCardState {
+  roomCode: string
+  gameType: 'secret_card'
+  matchNumber: number
+  gameNumber: number
+  maxGames: number
+  status: SecretCardStatus
+  roundNumber: number
+  maxRounds: number
+  targetWins: number
+  startingChips: number
+  ante: number
+  players: SecretCardPlayer[]
+  turnPlayerId: string | null
+  pot: number
+  maxPot: number
+  currentBet: number
+  contributions: Record<string, number>
+  cards: { self: number | null; opponent: number | null }
+  revealed: boolean
+  roundWinnerId: string | null
+  gameWinnerId: string | null
+  matchWinnerId: string | null
+  lastAction: { playerId: string; action: string; amount: number; automatic?: boolean } | null
+  rematchReady: string[]
+  turnDurationSeconds: number
+  turnStartedAt: number | null
+  turnDeadline: number | null
+  transitionDeadline: number | null
+  reconnectDeadlines: Record<string, number>
+  serverNow: number
 }

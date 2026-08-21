@@ -19,22 +19,57 @@ export interface CharacterAsset {
   assets: Record<CharacterMood, string | null>
 }
 
-const emptySlots: Record<CharacterMood, null> = {
-  default: null,
-  myTurn: null,
-  waiting: null,
-  thinking: null,
-  win: null,
-  lose: null,
-  disconnected: null,
-  reconnected: null,
-  reaction: null,
+const sprites = import.meta.glob<string>([
+  './*/idle.webp',
+  './*/my-turn.webp',
+  './*/waiting.webp',
+  './*/thinking.webp',
+  './*/win.webp',
+  './*/lose.webp',
+  './*/disconnected.webp',
+  './*/reconnected.webp',
+  './*/reaction-laugh.webp',
+], {
+  eager: true,
+  query: '?url',
+  import: 'default',
+})
+
+function sprite(character: CharacterId, name: string) {
+  const path = [`./${character}/${name}.webp`, `./${character}/${name}.png`]
+    .find((candidate) => sprites[candidate])
+  if (!path) throw new Error(`Missing shared character asset: ${character}/${name}`)
+  return sprites[path]
+}
+
+function character(
+  id: CharacterId,
+  label: string,
+  shortLabel: string,
+  theme: string,
+): CharacterAsset {
+  return {
+    id,
+    label,
+    shortLabel,
+    theme,
+    assets: {
+      default: sprite(id, 'idle'),
+      myTurn: sprite(id, 'my-turn'),
+      waiting: sprite(id, 'waiting'),
+      thinking: sprite(id, 'thinking'),
+      win: sprite(id, 'win'),
+      lose: sprite(id, 'lose'),
+      disconnected: sprite(id, 'disconnected'),
+      reconnected: sprite(id, 'reconnected'),
+      reaction: sprite(id, 'reaction-laugh'),
+    },
+  }
 }
 
 export const characterAssets: Record<CharacterId, CharacterAsset> = {
-  chiikawa: { id: 'chiikawa', label: '치이카와', shortLabel: '치', theme: 'pink', assets: { ...emptySlots } },
-  hachiware: { id: 'hachiware', label: '하치와레', shortLabel: '하', theme: 'sky', assets: { ...emptySlots } },
-  momonga: { id: 'momonga', label: '모몽가', shortLabel: '모', theme: 'lilac', assets: { ...emptySlots } },
-  usagi: { id: 'usagi', label: '우사기', shortLabel: '우', theme: 'yellow', assets: { ...emptySlots } },
+  chiikawa: character('chiikawa', '치이카와', '치', 'pink'),
+  hachiware: character('hachiware', '하치와레', '하', 'sky'),
+  momonga: character('momonga', '모몽가', '모', 'lilac'),
+  usagi: character('usagi', '우사기', '우', 'yellow'),
 }
-

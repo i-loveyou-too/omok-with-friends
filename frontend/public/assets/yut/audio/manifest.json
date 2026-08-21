@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "basePath": "/omok/assets/yut/audio/",
+  "bgm": "bgm.ogg",
+  "sfx": {
+    "throw": "yut-throw.ogg",
+    "landing": "yut-land.ogg",
+    "smallResult": "result-normal.ogg",
+    "bigResult": "result-yut-mo.ogg",
+    "backdo": "backdo.ogg",
+    "luckyCard": "card-flip.ogg",
+    "jackpotCard": "jackpot.ogg",
+    "dangerCard": "danger.ogg",
+    "capture": "capture.ogg",
+    "stack": "stack.ogg",
+    "finish": "finish.ogg",
+    "victory": "victory.ogg"
+  }
+}

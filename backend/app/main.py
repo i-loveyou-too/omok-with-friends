@@ -14,19 +14,56 @@ from .protocol import (
     JoinMessage,
     MoveMessage,
     ReactionMessage,
+    SecretCardActionMessage,
+    SecretCardSimpleMessage,
     SimpleMessage,
     UndoResponseMessage,
     client_message_adapter,
+    secret_card_message_adapter,
 )
 from .rooms import room_manager
+from .secret_card import SecretCardState
+from .secret_rooms import secret_card_room_manager
+from .yut import yut_room_manager
+
+
+async def broadcast_secret_state(room: SecretCardState) -> None:
+    dead = []
+    connections = secret_card_room_manager.connections.connections.get(room.room_code, {})
+    for token, socket in list(connections.items()):
+        try:
+            await socket.send_json({"type": "game_state", "state": room.snapshot(token)})
+        except Exception:
+            dead.append((token, socket))
+    for token, socket in dead:
+        secret_card_room_manager.connections.disconnect(room.room_code, token, socket)
+        room.disconnect(token)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     async def cleanup_rooms() -> None:
+        cleanup_ticks = 0
         while True:
-            await asyncio.sleep(60)
-            room_manager.cleanup()
+            await asyncio.sleep(0.25)
+            cleanup_ticks += 1
+            for room in list(secret_card_room_manager.rooms.values()):
+                timeout_event = room.expire_turn()
+                reconnect_events = room.expire_reconnects()
+                transition_event = room.advance()
+                if timeout_event or reconnect_events or transition_event:
+                    await broadcast_secret_state(room)
+                if timeout_event:
+                    await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "round_timeout", **timeout_event})
+                for reconnect_event in reconnect_events:
+                    await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "reconnect_timeout", **reconnect_event})
+                if transition_event:
+                    await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "auto_advanced", **transition_event})
+            if cleanup_ticks >= 240:
+                cleanup_ticks = 0
+                room_manager.cleanup()
+                yut_room_manager.cleanup()
+                secret_card_room_manager.cleanup()
 
     cleanup_task = asyncio.create_task(cleanup_rooms())
     try:
@@ -55,7 +92,7 @@ async def game_error_handler(_: Request, exc: GameError) -> JSONResponse:
 
 @app.get("/omok/api/health")
 async def health() -> dict:
-    return {"ok": True, "rooms": len(room_manager.rooms)}
+    return {"ok": True, "rooms": len(room_manager.rooms), "yutRooms": len(yut_room_manager.rooms), "secretCardRooms": len(secret_card_room_manager.rooms)}
 
 
 @app.post("/omok/api/rooms", status_code=201)
@@ -68,6 +105,30 @@ async def create_room() -> dict:
 async def room_status(room_code: str) -> dict:
     room = room_manager.get(room_code)
     return {"roomCode": room.room_code, "available": len(room.players) < 2}
+
+
+@app.post("/omok/api/yut/rooms", status_code=201)
+async def create_yut_room(mode: str = "lucky") -> dict:
+    room = await yut_room_manager.create(mode)
+    return {"roomCode": room.room_code, "mode": room.mode}
+
+
+@app.get("/omok/api/yut/rooms/{room_code}")
+async def yut_room_status(room_code: str) -> dict:
+    room = yut_room_manager.get(room_code)
+    return {"roomCode": room.room_code, "available": len(room.players) < 2, "mode": room.mode}
+
+
+@app.post("/omok/api/secret-card/rooms", status_code=201)
+async def create_secret_card_room() -> dict:
+    room = await secret_card_room_manager.create()
+    return {"roomCode": room.room_code, "gameType": "secret_card"}
+
+
+@app.get("/omok/api/secret-card/rooms/{room_code}")
+async def secret_card_room_status(room_code: str) -> dict:
+    room = secret_card_room_manager.get(room_code)
+    return {"roomCode": room.room_code, "gameType": "secret_card", "available": len(room.players) < 2}
 
 
 @app.websocket("/omok/ws/rooms/{room_code}")
@@ -140,7 +201,6 @@ async def room_socket(websocket: WebSocket, room_code: str) -> None:
                     elif message.type == "ping":
                         await room_manager.connections.send(websocket, {"type": "pong"})
                         continue
-
                 await room_manager.connections.broadcast(
                     room.room_code, {"type": "game_state", "state": room.snapshot()}
                 )
@@ -172,3 +232,124 @@ async def room_socket(websocket: WebSocket, room_code: str) -> None:
             await room_manager.connections.broadcast(
                 room.room_code, {"type": "game_state", "state": room.snapshot()}
             )
+
+
+@app.websocket("/omok/ws/yut/rooms/{room_code}")
+async def yut_room_socket(websocket: WebSocket, room_code: str) -> None:
+    await websocket.accept()
+    token = None
+    room = None
+    try:
+        room = yut_room_manager.get(room_code)
+        first = await websocket.receive_json()
+        if first.get("type") != "join":
+            raise GameError("join_required", "먼저 윷놀이 방에 입장해 주세요.")
+        nickname = str(first.get("nickname", "")).strip()[:12]
+        character = str(first.get("character", ""))
+        if not nickname:
+            raise GameError("invalid_nickname", "닉네임을 입력해 주세요.")
+        player = room.join(nickname, character, first.get("token"))
+        token = player.token
+        reconnected = bool(first.get("token") and first.get("token") == token)
+        await yut_room_manager.connections.connect(room.room_code, token, websocket)
+        await yut_room_manager.connections.send(websocket, {"type": "joined", "token": token, "playerId": player.public_id, "reconnected": reconnected})
+        await yut_room_manager.connections.broadcast(room.room_code, {"type": "game_state", "state": room.snapshot()})
+
+        while True:
+            raw = await websocket.receive_json()
+            try:
+                kind = raw.get("type")
+                if kind == "roll":
+                    room.roll(token)
+                elif kind == "move":
+                    room.move(token, int(raw.get("pieceId")))
+                elif kind == "rematch_request":
+                    room.request_rematch(token)
+                elif kind == "ping":
+                    await yut_room_manager.connections.send(websocket, {"type": "pong"})
+                    continue
+                elif kind == "leave":
+                    room.disconnect(token)
+                    await websocket.close(code=1000)
+                    return
+                else:
+                    raise GameError("invalid_message", "알 수 없는 윷놀이 요청이에요.")
+                await yut_room_manager.connections.broadcast(room.room_code, {"type": "game_state", "state": room.snapshot()})
+            except (GameError, TypeError, ValueError) as exc:
+                if isinstance(exc, GameError): code, detail = exc.code, exc.message
+                else: code, detail = "invalid_message", "요청을 다시 확인해 주세요."
+                await yut_room_manager.connections.send(websocket, {"type": "error", "code": code, "message": detail})
+    except WebSocketDisconnect:
+        pass
+    except GameError as exc:
+        await websocket.send_json({"type": "error", "code": exc.code, "message": exc.message})
+        await websocket.close(code=4000)
+    finally:
+        if token and room:
+            yut_room_manager.connections.disconnect(room.room_code, token, websocket)
+            room.disconnect(token)
+            await yut_room_manager.connections.broadcast(room.room_code, {"type": "game_state", "state": room.snapshot()})
+
+
+@app.websocket("/omok/ws/secret-card/rooms/{room_code}")
+async def secret_card_room_socket(websocket: WebSocket, room_code: str) -> None:
+    await websocket.accept()
+    token = None
+    room = None
+    try:
+        room = secret_card_room_manager.get(room_code)
+        first = secret_card_message_adapter.validate_python(await websocket.receive_json())
+        if not isinstance(first, JoinMessage):
+            raise GameError("join_required", "먼저 방에 입장해 주세요.")
+        player = room.join(first.nickname, first.character, first.token)
+        token = player.token
+        reconnected = bool(first.token and first.token == token)
+        await secret_card_room_manager.connections.connect(room.room_code, token, websocket)
+        await secret_card_room_manager.connections.send(websocket, {"type": "joined", "token": token, "playerId": player.public_id, "reconnected": reconnected})
+        await broadcast_secret_state(room)
+        if reconnected:
+            await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "presence", "playerId": player.public_id, "status": "reconnected"})
+
+        while True:
+            try:
+                message = secret_card_message_adapter.validate_python(await websocket.receive_json())
+                if isinstance(message, JoinMessage):
+                    raise GameError("already_joined", "이미 입장했어요.")
+                if isinstance(message, ReactionMessage):
+                    event = room.reaction(token, message.value)
+                    await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "reaction", **event})
+                    continue
+                if isinstance(message, SecretCardActionMessage):
+                    event = room.act(token, message.action, message.amount)
+                    await broadcast_secret_state(room)
+                    await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "card_action_confirmed", **event})
+                    continue
+                if isinstance(message, SecretCardSimpleMessage):
+                    if message.type == "next_round":
+                        room.request_next_round(token)
+                    elif message.type == "rematch_request":
+                        room.request_rematch(token)
+                    elif message.type == "leave":
+                        room.leave(token)
+                        await broadcast_secret_state(room)
+                        await websocket.close(code=1000)
+                        return
+                    elif message.type == "ping":
+                        await secret_card_room_manager.connections.send(websocket, {"type": "pong"})
+                        continue
+                    await broadcast_secret_state(room)
+            except (GameError, ValidationError) as exc:
+                code, detail = (exc.code, exc.message) if isinstance(exc, GameError) else ("invalid_message", "메시지 형식이 올바르지 않아요.")
+                await secret_card_room_manager.connections.send(websocket, {"type": "error", "code": code, "message": detail})
+    except WebSocketDisconnect:
+        pass
+    except (GameError, ValidationError) as exc:
+        code, detail = (exc.code, exc.message) if isinstance(exc, GameError) else ("invalid_message", "입장 정보가 올바르지 않아요.")
+        await websocket.send_json({"type": "error", "code": code, "message": detail})
+        await websocket.close(code=4000)
+    finally:
+        if token and room:
+            secret_card_room_manager.connections.disconnect(room.room_code, token, websocket)
+            room.disconnect(token)
+            await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "presence", "playerId": room.players[token].public_id, "status": "disconnected"})
+            await broadcast_secret_state(room)
