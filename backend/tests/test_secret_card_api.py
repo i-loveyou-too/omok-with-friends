@@ -51,6 +51,29 @@ def test_secret_card_websocket_hides_own_card_and_syncs_actions():
             assert joined_first["playerId"] != joined_second["playerId"]
 
 
+def test_secret_card_websocket_skill_action_round_trips_through_snapshot():
+    response = client.post(f"{BASE}/api/secret-card/rooms")
+    code = response.json()["roomCode"]
+
+    with client.websocket_connect(f"{BASE}/ws/secret-card/rooms/{code}") as first:
+        first.send_json({"type": "join", "nickname": "A", "character": "chiikawa"})
+        first.receive_json()
+        first.receive_json()
+
+        with client.websocket_connect(f"{BASE}/ws/secret-card/rooms/{code}") as second:
+            second.send_json({"type": "join", "nickname": "B", "character": "hachiware"})
+            second.receive_json()
+            first.receive_json()
+            second.receive_json()
+
+            first.send_json({"type": "skill_action", "skill": "hint"})
+            first_state = first.receive_json()["state"]
+            second.receive_json()
+            assert first_state["skills"]["hintBand"] in {"low", "mid", "high"}
+            assert first.receive_json()["type"] == "skill_used"
+            assert second.receive_json()["type"] == "skill_used"
+
+
 def test_missing_secret_card_room_returns_not_found():
     response = client.get(f"{BASE}/api/secret-card/rooms/NOPE0")
     assert response.status_code == 404

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from .game import GameError
-from .protocol import JoinMessage, MoveMessage, ReactionMessage, SecretCardActionMessage, SecretCardSimpleMessage, SimpleMessage, UndoResponseMessage, client_message_adapter, secret_card_message_adapter
+from .protocol import JoinMessage, MoveMessage, ReactionMessage, SecretCardActionMessage, SecretCardSimpleMessage, SecretCardSkillMessage, SimpleMessage, UndoResponseMessage, client_message_adapter, secret_card_message_adapter
 from .rooms import room_manager
 from .secret_card import SecretCardState
 from .secret_rooms import secret_card_room_manager
@@ -218,6 +218,11 @@ async def secret_card_room_socket(websocket: WebSocket, room_code: str) -> None:
                     event = room.act(token, message.action, message.amount)
                     await broadcast_secret_state(room)
                     await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "card_action_confirmed", **event})
+                    continue
+                if isinstance(message, SecretCardSkillMessage):
+                    event = room.use_skill(token, message.skill)
+                    await broadcast_secret_state(room)
+                    await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "skill_used", **event})
                     continue
                 if isinstance(message, SecretCardSimpleMessage):
                     if message.type == "next_round":

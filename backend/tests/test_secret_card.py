@@ -4,8 +4,19 @@ from app.game import GameError
 from app.secret_card import (
     ANTE,
     GAME_RESULT_DURATION_MS,
+    HINT_COST,
+    HINT_COST_PREFERRED,
+    INSURANCE_COST,
+    INSURANCE_COST_PREFERRED,
+    INSURANCE_REFUND_RATIO,
+    INSURANCE_REFUND_RATIO_PREFERRED,
     MAX_ROUNDS,
+    POKER_FACE_COOLDOWN_MS_PREFERRED,
+    POKER_FACE_DURATION_MS,
+    PRESSURE_COST,
+    PRESSURE_COOLDOWN_MS,
     RECONNECT_GRACE_SECONDS,
+    RISK_BET_BONUS,
     ROUND_RESULT_DURATION_MS,
     STARTING_CHIPS,
     TARGET_WINS,
@@ -13,10 +24,10 @@ from app.secret_card import (
 )
 
 
-def room_with_players():
+def room_with_players(first_character="chiikawa", second_character="hachiware"):
     room = SecretCardState("CARDS")
-    first = room.join("첫째", "chiikawa")
-    second = room.join("둘째", "hachiware")
+    first = room.join("첫째", first_character)
+    second = room.join("둘째", second_character)
     return room, first, second
 
 
@@ -191,3 +202,109 @@ def test_all_in_resolves_at_showdown_and_next_round_is_automatic():
     assert room.pot == STARTING_CHIPS * 2
     assert first.all_ins == 1
     assert_error("auto_progress", lambda: room.request_next_round(first.token))
+
+
+# --- Skills -------------------------------------------------------------
+
+def test_hint_reveals_own_hidden_card_band_and_costs_more_without_the_character_bonus():
+    # second player is hachiware, whose preferred skill is "hint".
+    room, first, second = room_with_players()
+    room.cards[first.token] = 9
+    room.cards[second.token] = 2
+
+    first_chips = first.chips
+    room.use_skill(first.token, "hint")
+    assert first_chips - first.chips == HINT_COST
+    assert room.hint_bands[first.token] == "high"
+    assert room.snapshot(first.token)["skills"]["hintBand"] == "high"
+
+    second_chips = second.chips
+    room.use_skill(second.token, "hint")
+    assert second_chips - second.chips == HINT_COST_PREFERRED
+    assert room.hint_bands[second.token] == "low"
+    assert room.snapshot(second.token)["skills"]["hint"]["preferred"] is True
+
+
+def test_hint_is_limited_to_once_per_round_and_resets_next_round():
+    room, first, second = room_with_players()
+    room.use_skill(first.token, "hint")
+    assert_error("skill_already_used", lambda: room.use_skill(first.token, "hint"))
+    check_showdown(room, first, second)
+    advance_result(room)
+    room.use_skill(first.token, "hint")  # does not raise on the new round
+
+
+def test_poker_face_sets_a_short_flag_and_enforces_cooldown_with_character_discount():
+    # second player is momonga, whose preferred skill is "poker_face".
+    room, first, second = room_with_players(second_character="momonga")
+    room.use_skill(second.token, "poker_face")
+    assert room.snapshot(first.token)["skills"]["opponentPokerFaceActive"] is True
+    assert second.skill_cooldowns["poker_face"] - epoch_ms_now(room) <= POKER_FACE_COOLDOWN_MS_PREFERRED
+    assert_error("skill_cooldown", lambda: room.use_skill(second.token, "poker_face"))
+    assert room.use_skill(first.token, "poker_face")  # no discount, but independent cooldown
+
+
+def epoch_ms_now(room):
+    return room.snapshot()["serverNow"]
+
+
+def test_pressure_costs_chips_targets_opponent_and_has_a_cooldown():
+    room, first, second = room_with_players()
+    chips_before = first.chips
+    event = room.use_skill(first.token, "pressure")
+    assert first.chips == chips_before - PRESSURE_COST
+    assert event["targetPlayerId"] == second.public_id
+    assert room.snapshot(first.token)["skills"]["pressure"]["ready"] is False
+    assert first.skill_cooldowns["pressure"] - epoch_ms_now(room) <= PRESSURE_COOLDOWN_MS
+    assert_error("skill_cooldown", lambda: room.use_skill(first.token, "pressure"))
+
+
+def test_risk_bet_locks_to_one_player_and_pays_a_bonus_between_players():
+    room, first, second = room_with_players()
+    room.use_skill(first.token, "risk_bet")
+    assert_error("skill_unavailable", lambda: room.use_skill(second.token, "risk_bet"))
+    assert room.snapshot(first.token)["skills"]["riskBet"]["active"] is True
+    assert room.snapshot(second.token)["skills"]["riskBet"]["locked"] is True
+
+    check_showdown(room, first, second, first_card=9, second_card=1)
+    assert room.round_skill_result["riskBet"] == {"playerId": first.public_id, "won": True, "amount": RISK_BET_BONUS}
+    assert second.chips == STARTING_CHIPS - ANTE - RISK_BET_BONUS
+
+    advance_result(room)
+    assert room.risk_token is None
+    assert room.round_skill_result is None
+
+
+def test_risk_bet_penalizes_the_declarer_when_they_lose():
+    room, first, second = room_with_players()
+    room.use_skill(second.token, "risk_bet")
+    check_showdown(room, first, second, first_card=9, second_card=1)
+    assert room.round_skill_result["riskBet"] == {"playerId": second.public_id, "won": False, "amount": RISK_BET_BONUS}
+
+
+def test_insurance_refunds_part_of_the_loss_with_character_bonus():
+    # first player is chiikawa, whose preferred skill is "insurance".
+    room, first, second = room_with_players()
+    chips_before = first.chips
+    room.use_skill(first.token, "insurance")
+    assert chips_before - first.chips == INSURANCE_COST_PREFERRED
+
+    check_showdown(room, first, second, first_card=1, second_card=9)
+    contributed = ANTE
+    refund = int(contributed * INSURANCE_REFUND_RATIO_PREFERRED)
+    assert room.round_skill_result["insurance"] == {"playerId": first.public_id, "refund": refund}
+    assert first.chips == STARTING_CHIPS - INSURANCE_COST_PREFERRED - ANTE + refund
+
+
+def test_skills_are_unavailable_outside_the_playing_status():
+    room, first, second = room_with_players()
+    check_showdown(room, first, second)
+    assert room.status == "round_finished"
+    assert_error("skill_unavailable", lambda: room.use_skill(first.token, "hint"))
+
+
+def test_invalid_skill_and_insufficient_chips_are_rejected():
+    room, first, second = room_with_players()
+    assert_error("invalid_skill", lambda: room.use_skill(first.token, "not_a_skill"))
+    first.chips = 1
+    assert_error("not_enough_chips", lambda: room.use_skill(first.token, "hint"))

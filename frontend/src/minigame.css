@@ -5,26 +5,187 @@
 
 .secret-back{position:relative;z-index:5;border:1px solid rgba(255,255,255,.34);border-radius:999px;padding:9px 15px;background:rgba(19,27,59,.84);color:#fff;font-weight:900;cursor:pointer}.secret-lobby{min-height:100dvh;padding:22px;display:grid;align-content:center;justify-items:center;gap:18px;color:#fff;background:linear-gradient(rgba(12,19,44,.2),rgba(12,19,44,.72)),url('/minigame/lobby-bg.png') center/cover fixed}.secret-lobby>.secret-back{position:absolute;left:20px;top:20px}.secret-lobby__card{width:min(860px,100%);display:grid;grid-template-columns:minmax(240px,42%) 1fr;gap:26px;align-items:center;padding:22px;border:2px solid rgba(255,255,255,.68);border-radius:32px;background:rgba(21,30,65,.82);backdrop-filter:blur(10px);box-shadow:0 24px 70px rgba(0,0,0,.28)}.secret-lobby__card img{width:100%;aspect-ratio:1;object-fit:contain}.secret-lobby__card p{margin:0;color:#ffd98c;font-weight:900}.secret-lobby__card h1{margin:5px 0;font:400 clamp(34px,6vw,56px)/1 'Jua',sans-serif}.secret-lobby__card span{color:#dfe8ff;font-weight:800}.secret-lobby__card ul{margin:18px 0 0;padding-left:20px;display:grid;gap:7px;color:#fff2d4;font-weight:700}.secret-lobby__actions{width:min(600px,100%);display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:15px;border-radius:24px;background:rgba(17,25,56,.86)}.secret-create,.secret-lobby__actions form{min-height:92px;border:0;border-radius:18px}.secret-create{background:linear-gradient(145deg,#ffd475,#f1a5bb);color:#583642;font-size:19px;font-weight:900;cursor:pointer}.secret-lobby__actions form{display:grid;align-content:center;gap:7px;padding:11px;background:rgba(255,255,255,.1)}.secret-lobby__actions label{font-size:12px;font-weight:900}.secret-lobby__actions form div{display:grid;grid-template-columns:1fr auto;gap:6px}.secret-lobby__actions input{min-width:0;border:0;border-radius:10px;padding:10px;font-size:18px;font-weight:900;text-transform:uppercase;letter-spacing:.15em}.secret-lobby__actions form button{border:0;border-radius:10px;padding:0 13px;background:#9dc6f6;color:#263b62;font-weight:900}.secret-lobby__actions .form-error{grid-column:1/-1;margin:0;text-align:center;color:#ffd0d5}
 
-.secret-room{min-height:100dvh;padding:14px 16px 24px;color:#fff8e9;background:linear-gradient(rgba(10,16,39,.34),rgba(9,14,35,.82)),url('/minigame/secret-table.png') center/cover fixed}.secret-room__header{width:min(920px,100%);margin:0 auto 8px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center}.secret-room__header>button{justify-self:start;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:8px 13px;background:rgba(19,27,59,.8);color:#fff;font-weight:900}.secret-room__header>button:last-child{justify-self:end}.secret-room__header div{display:grid;text-align:center}.secret-room__header b{font:28px 'Jua',sans-serif}.secret-room__header small{color:#d6def4;font-weight:800;letter-spacing:.08em}.secret-game-stage{position:relative;width:min(790px,100%);margin:auto;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;justify-items:center;gap:9px 16px}.secret-player-badge{position:relative;width:min(250px,100%);display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:8px;padding:7px 10px;border:2px solid transparent;border-radius:18px;background:rgba(20,29,60,.84);box-shadow:0 8px 20px rgba(0,0,0,.22)}.secret-player-badge.is-active{border-color:#ffd36e;box-shadow:0 0 0 4px rgba(255,211,110,.16)}.secret-player-badge.is-offline{filter:grayscale(.55);opacity:.76}.secret-player-badge .avatar{width:62px;height:62px}.secret-player-badge .reaction-bubble{bottom:75%;left:58%;font-size:10px}.secret-player-badge div{display:grid;min-width:0}.secret-player-badge b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.secret-player-badge small{font-size:10px;color:#c8d2ea}.secret-player-badge>span{color:#ffe08f;font-weight:900;white-space:nowrap}.secret-player-badge.is-empty{display:grid;place-items:center;min-height:78px;color:#d5def2}.secret-player-badge:first-child{grid-column:1/-1}.secret-card-zone{display:grid;justify-items:center;gap:4px}.secret-card-zone img{width:clamp(86px,13vw,116px);aspect-ratio:2/3;object-fit:cover;border-radius:16px;box-shadow:0 12px 26px rgba(0,0,0,.38)}.secret-card-zone span{font-size:11px;color:#dce6ff;font-weight:800}.secret-card-zone--opponent{grid-column:1/-1}.secret-card-zone--self{grid-column:1/-1}.secret-player-badge:nth-of-type(2){grid-column:1/-1}.secret-table-panel{grid-column:1/-1;width:min(650px,100%);padding:12px;border:1px solid rgba(255,255,255,.18);border-radius:22px;background:rgba(18,27,57,.8);backdrop-filter:blur(8px);box-shadow:0 14px 34px rgba(0,0,0,.22)}.secret-round-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.secret-round-strip span{display:grid;gap:1px;padding:6px;border-radius:12px;background:rgba(255,255,255,.07);text-align:center;font-size:10px;color:#cbd8f0}.secret-round-strip b{color:#fff;font-size:14px}.secret-bet-line{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:9px;font-size:11px;color:#cbd8f0}.secret-bet-line strong{text-align:center;color:#ffe2a5;font-size:14px}.secret-bet-line span:last-child{text-align:right}.secret-last-action{margin:6px 0 0;text-align:center;font-weight:900;color:#ffc7dc}.secret-actions{grid-column:1/-1;width:min(700px,100%);display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px}.secret-actions button{min-height:48px;border:0;border-radius:14px;background:#f5c766;color:#523d2f;font-weight:900;box-shadow:0 5px 0 rgba(75,49,37,.24);cursor:pointer}.secret-actions button:nth-child(1),.secret-actions button:nth-child(2){background:#9dc6f6}.secret-actions button:disabled{cursor:not-allowed;opacity:.4;box-shadow:none}.secret-actions__allin{background:#f28d9d!important;color:#fff!important}.secret-actions__fold{background:#6d7180!important;color:#fff!important}.secret-reactions{grid-column:1/-1;display:grid;grid-template-columns:repeat(6,1fr);gap:6px;width:min(600px,100%)}.secret-reactions button{min-height:36px;border:1px solid rgba(255,255,255,.25);border-radius:11px;background:rgba(255,255,255,.88);color:#493c45;font-size:11px;font-weight:900}.secret-result{position:absolute;z-index:50;inset:50% auto auto 50%;transform:translate(-50%,-50%);width:min(420px,calc(100% - 28px));padding:20px;border:3px solid #fff;border-radius:26px;text-align:center;background:linear-gradient(145deg,#fff4d6,#ffd5df);color:#5a3b3c;box-shadow:0 24px 70px rgba(0,0,0,.48)}.secret-result.is-lose{background:linear-gradient(145deg,#eef0ff,#d9d9ee)}.secret-result h2{margin:0;font:38px 'Jua',sans-serif}.secret-result p{margin:8px 0}.secret-result>button,.secret-result>div:last-child button{min-height:46px;border:0;border-radius:14px;padding:8px 18px;background:#f2b94e;color:#594127;font-weight:900}.secret-result>div:last-child{display:grid;grid-template-columns:1fr 1fr;gap:8px}.secret-result>div:last-child button:last-child{background:#f3aeb9}.secret-stats{display:grid!important;grid-template-columns:repeat(4,1fr)!important;gap:5px!important;margin:12px 0}.secret-stats span{display:grid;padding:7px 3px;border-radius:10px;background:rgba(255,255,255,.58);font-size:10px}.secret-stats b{font-size:14px}.secret-toast{position:fixed;z-index:80;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);width:max-content;max-width:calc(100% - 30px);padding:10px 16px;border-radius:999px;background:#192143;color:#fff;font-weight:900;box-shadow:0 8px 25px rgba(0,0,0,.3)}
-.secret-room--loading,.secret-room--waiting{display:grid;place-items:center}.secret-loading,.secret-waiting-card{display:grid;justify-items:center;gap:10px;padding:28px;border:2px solid rgba(255,255,255,.6);border-radius:30px;background:rgba(20,29,60,.88);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}.secret-loading span{font-size:50px;animation:pulse 1s infinite}.secret-loading small{color:#cdd7ed}.secret-room--waiting>.secret-back{position:absolute;left:18px;top:18px}.secret-waiting-card p{margin:0;color:#ffd98c;font-weight:900}.secret-waiting-card h1{margin:0;font:56px 'Jua';letter-spacing:.15em}.secret-waiting-card>img{width:110px;aspect-ratio:2/3;object-fit:cover;border-radius:15px;transform:rotate(3deg)}.secret-waiting-card>button{border:0;border-radius:14px;padding:12px 20px;background:#f5c766;color:#513b2d;font-weight:900}
-.secret-game-stage>.secret-player-badge{grid-column:1/-1}
+.secret-room--loading,.secret-room--waiting{min-height:100dvh;display:grid;place-items:center;padding:14px 16px 24px;color:#fff8e9;background:linear-gradient(rgba(10,16,39,.34),rgba(9,14,35,.82)),url('/minigame/secret-table.png') center/cover fixed}.secret-loading,.secret-waiting-card{display:grid;justify-items:center;gap:10px;padding:28px;border:2px solid rgba(255,255,255,.6);border-radius:30px;background:rgba(20,29,60,.88);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}.secret-loading span{font-size:50px;animation:pulse 1s infinite}.secret-loading small{color:#cdd7ed}.secret-room--waiting>.secret-back{position:absolute;left:18px;top:18px}.secret-waiting-card p{margin:0;color:#ffd98c;font-weight:900}.secret-waiting-card h1{margin:0;font:56px 'Jua';letter-spacing:.15em}.secret-waiting-card>img{width:110px;aspect-ratio:2/3;object-fit:cover;border-radius:15px;transform:rotate(3deg)}.secret-waiting-card>button{border:0;border-radius:14px;padding:12px 20px;background:#f5c766;color:#513b2d;font-weight:900}
 .secret-loading button{border:0;border-radius:13px;padding:10px 16px;background:#f5c766;color:#513b2d;font-weight:900;cursor:pointer}
 
-@media(max-width:760px){.minigame-hub{align-content:start;padding-top:16px}.minigame-hub__logo{max-height:190px}.minigame-hub__grid{grid-template-columns:1fr}.minigame-select-card{grid-template-columns:40% 1fr;border-radius:24px}.secret-lobby{align-content:start;padding-top:70px}.secret-lobby__card{grid-template-columns:1fr;padding:15px;text-align:center}.secret-lobby__card img{width:min(270px,80vw);justify-self:center}.secret-lobby__card ul{text-align:left}.secret-lobby__actions{grid-template-columns:1fr}.secret-room{padding:8px 8px 18px}.secret-room__header b{font-size:21px}.secret-room__header button{font-size:10px;padding:7px 9px}.secret-game-stage{gap:6px}.secret-player-badge{width:min(310px,100%);grid-template-columns:48px 1fr auto;padding:5px 8px}.secret-player-badge .avatar{width:46px;height:46px}.secret-card-zone img{width:82px}.secret-table-panel{padding:8px}.secret-round-strip{grid-template-columns:repeat(4,1fr);gap:4px}.secret-round-strip span{padding:4px 2px;font-size:9px}.secret-round-strip b{font-size:11px}.secret-bet-line{grid-template-columns:1fr;gap:2px;text-align:center}.secret-bet-line span:last-child{text-align:center}.secret-actions{grid-template-columns:repeat(4,1fr);gap:5px}.secret-actions button{min-height:42px;font-size:11px}.secret-reactions{grid-template-columns:repeat(3,1fr)}.secret-result{padding:16px}.secret-result h2{font-size:31px}.secret-stats{grid-template-columns:repeat(2,1fr)!important}}
-@media(max-width:390px){.minigame-select-card{grid-template-columns:36% 1fr;padding:10px}.secret-card-zone img{width:69px}.secret-player-badge{min-height:50px}.secret-round-strip span:nth-child(2){display:none}.secret-round-strip{grid-template-columns:repeat(3,1fr)}.secret-actions button{min-height:39px}.secret-reactions button{min-height:32px}.secret-room__header small{display:none}}
+/* ==========================================================================
+   Secret card — table game screen
+   Layout: top (opponent) / mid (round · pot · cards · reveal) / bottom (self + actions + skills)
+   ========================================================================== */
 
-/* Final secret-card state and approved reaction-sheet wiring. */
-.secret-action-avatar{width:62px;height:62px;display:grid;place-items:center}
-.secret-action-crop{position:relative;width:100%;max-height:100%;overflow:hidden}
-.secret-action-crop img{position:absolute;max-width:none;object-fit:fill}
-.secret-result__victory{width:min(190px,60%);max-height:105px;object-fit:contain;margin:-12px auto 3px}
-.secret-auto-next{padding:9px;border-radius:12px;background:rgba(255,255,255,.55);font-weight:900}
-.secret-round-strip{grid-template-columns:repeat(5,1fr)}
-
-@media(max-width:760px){
-  .secret-player-badge .avatar,.secret-action-avatar{width:46px;height:46px}
-  .secret-round-strip{grid-template-columns:repeat(5,1fr)}
+.secret-room--table {
+  min-height: 100dvh;
+  padding: 10px 10px 18px;
+  color: #fff8e9;
+  background: linear-gradient(rgba(8, 13, 33, .5), rgba(7, 11, 28, .88)), url('/minigame/secret-table.png') center/cover fixed;
+  overflow-x: hidden;
 }
-@media(max-width:390px){
-  .secret-round-strip{grid-template-columns:repeat(4,1fr)}
+.secret-room__header { width: min(920px, 100%); margin: 0 auto 8px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+.secret-room__header > button { justify-self: start; border: 1px solid rgba(255, 255, 255, .28); border-radius: 999px; padding: 8px 13px; background: rgba(19, 27, 59, .8); color: #fff; font-weight: 900; }
+.secret-room__header > button:last-child { justify-self: end; }
+.secret-room__header div { display: grid; text-align: center; }
+.secret-room__header b { font: 24px 'Jua', sans-serif; }
+.secret-room__header small { color: #d6def4; font-weight: 800; letter-spacing: .08em; }
+
+.secret-stage { position: relative; width: min(560px, 100%); margin: 6px auto 0; display: grid; gap: 10px; }
+
+/* --- top: opponent --- */
+.secret-stage__top { display: grid; justify-items: center; gap: 4px; }
+
+.secret-player-badge { position: relative; width: min(280px, 100%); display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 8px; padding: 7px 10px; border: 2px solid transparent; border-radius: 18px; background: rgba(20, 29, 60, .84); box-shadow: 0 8px 20px rgba(0, 0, 0, .22); transition: border-color .2s, box-shadow .2s; }
+.secret-player-badge.is-active { border-color: #ffd36e; box-shadow: 0 0 0 4px rgba(255, 211, 110, .18); animation: badge-turn-bob 1.8s ease-in-out infinite; }
+.secret-player-badge.is-offline { filter: grayscale(.55); opacity: .76; }
+.secret-player-badge .avatar { width: 54px; height: 54px; }
+.secret-player-badge .reaction-bubble { bottom: 75%; left: 58%; font-size: 10px; }
+.secret-player-badge div { display: grid; min-width: 0; }
+.secret-player-badge b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.secret-player-badge small { font-size: 9.5px; color: #c8d2ea; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.secret-player-badge > span, .secret-star-count { color: #ffe08f; font-weight: 900; white-space: nowrap; }
+.secret-star-count { display: inline-block; animation: star-pop .32s ease-out; }
+.secret-player-badge.is-empty { display: grid; place-items: center; min-height: 78px; color: #d5def2; }
+.secret-mask-badge { position: absolute; z-index: 4; left: 40px; top: -6px; font-size: 15px; filter: drop-shadow(0 2px 0 rgba(0,0,0,.3)); animation: mask-wobble 1.6s ease-in-out infinite; }
+
+.secret-banner { position: relative; margin: 0; padding: 7px 14px; border-radius: 999px; background: rgba(255, 255, 255, .94); color: #493451; font-weight: 900; font-size: 12.5px; text-align: center; box-shadow: 0 6px 16px rgba(0, 0, 0, .22); animation: banner-pop 2.4s both; max-width: min(90%, 320px); }
+.secret-banner::before { content: ''; position: absolute; left: 50%; top: -6px; width: 12px; height: 12px; background: rgba(255, 255, 255, .94); transform: translateX(-50%) rotate(45deg); }
+
+/* --- mid: round meta, timer, cards, reveal --- */
+.secret-stage__mid { position: relative; display: grid; justify-items: center; gap: 8px; padding: 12px 10px; border: 1px solid rgba(255, 255, 255, .18); border-radius: 26px; background: rgba(16, 24, 52, .72); backdrop-filter: blur(8px); box-shadow: 0 16px 36px rgba(0, 0, 0, .28); transition: opacity .2s; }
+.secret-stage__mid.is-dealing { opacity: .92; }
+
+.secret-mid__meta { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 11px; color: #cbd8f0; font-weight: 800; }
+.secret-mid__meta b { color: #fff; font-size: 13px; }
+.secret-pot { display: flex; align-items: baseline; gap: 5px; padding: 3px 12px; border-radius: 999px; background: rgba(255, 211, 110, .14); }
+.secret-pot i { font-style: normal; color: #ffd98c; font-size: 10px; letter-spacing: .1em; }
+.secret-pot b { font: 22px 'Jua', sans-serif; color: #ffe9ba; text-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+
+.secret-timer-badge { position: absolute; right: 12px; top: 10px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, .12); color: #dce6ff; font-weight: 900; font-size: 12px; }
+.secret-timer-badge.is-warn { background: rgba(255, 211, 110, .22); color: #ffe2a5; }
+.secret-timer-badge.is-urgent { background: rgba(255, 138, 138, .26); color: #ffb4b4; animation: pulse 1s infinite; }
+.secret-timer-badge.is-critical { animation: timer-critical .5s infinite; }
+
+.secret-cards { position: relative; width: 100%; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; justify-items: center; gap: 6px; padding: 4px 0; }
+.secret-stage-label { grid-row: 2; grid-column: 1 / -1; margin-top: 2px; font: 15px 'Jua', sans-serif; color: #ffe2a5; text-shadow: 0 2px 6px rgba(0, 0, 0, .35); text-align: center; }
+.secret-card-zone { grid-row: 1; display: grid; justify-items: center; gap: 4px; }
+.secret-card-zone--opponent { grid-column: 1; }
+.secret-card-zone--self { grid-column: 3; }
+.secret-card-zone span { font-size: 10.5px; color: #dce6ff; font-weight: 800; }
+
+.secret-flipcard { width: clamp(84px, 22vw, 118px); aspect-ratio: 2 / 3; perspective: 900px; }
+.secret-flipcard__inner { position: relative; width: 100%; height: 100%; transition: transform .5s cubic-bezier(.2, .8, .2, 1); transform-style: preserve-3d; }
+.secret-flipcard.is-flipped .secret-flipcard__inner { transform: rotateY(180deg); }
+.secret-flipcard__face { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 16px; backface-visibility: hidden; box-shadow: 0 12px 26px rgba(0, 0, 0, .38); }
+.secret-flipcard__face--front { transform: rotateY(180deg); }
+
+.secret-pot-fly { position: absolute; left: 50%; top: 46%; z-index: 6; font-size: 22px; pointer-events: none; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .3)); }
+.secret-pot-fly--up { animation: pot-fly-up 1s ease-out forwards; }
+.secret-pot-fly--down { animation: pot-fly-down 1s ease-out forwards; }
+
+.secret-bet-line { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; font-size: 11px; color: #cbd8f0; text-align: center; }
+
+/* --- bottom: self, actions, skills --- */
+.secret-stage__bottom { display: grid; justify-items: center; gap: 8px; }
+
+.secret-actions { width: 100%; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.secret-actions button { min-height: 50px; border: 0; border-radius: 14px; background: #f5c766; color: #523d2f; font-weight: 900; font-size: 12.5px; box-shadow: 0 5px 0 rgba(75, 49, 37, .24); cursor: pointer; transition: transform .1s; }
+.secret-actions button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 3px 0 rgba(75, 49, 37, .24); }
+.secret-actions button:nth-child(1), .secret-actions button:nth-child(2) { background: #9dc6f6; }
+.secret-actions button:disabled { cursor: not-allowed; opacity: .4; box-shadow: none; }
+.secret-actions__allin { background: #f28d9d !important; color: #fff !important; }
+.secret-actions__fold { background: #6d7180 !important; color: #fff !important; }
+
+.secret-skills { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; }
+.secret-skill { display: grid; justify-items: center; gap: 1px; min-height: 54px; padding: 6px 4px; border: 2px solid rgba(255, 255, 255, .22); border-radius: 14px; background: rgba(24, 34, 68, .82); color: #f2e9ff; cursor: pointer; transition: transform .12s, border-color .2s; }
+.secret-skill:active:not(:disabled) { transform: translateY(1px) scale(.98); }
+.secret-skill i { font-style: normal; font-size: 16px; }
+.secret-skill b { font-size: 10.5px; font-weight: 900; }
+.secret-skill small { font-size: 8.5px; color: #b9c4e6; }
+.secret-skill.is-preferred { border-color: #ffd36e; box-shadow: 0 0 0 3px rgba(255, 211, 110, .14); }
+.secret-skill:disabled { opacity: .42; cursor: not-allowed; }
+
+.secret-last-action { margin: 0; text-align: center; font-size: 11px; font-weight: 800; color: #ffc7dc; }
+
+.secret-reactions { width: min(500px, 100%); margin: 4px auto 0; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.secret-reactions button { min-height: 34px; border: 1px solid rgba(255, 255, 255, .25); border-radius: 11px; background: rgba(255, 255, 255, .88); color: #493c45; font-size: 11px; font-weight: 900; }
+
+.secret-result { position: absolute; z-index: 50; inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(400px, calc(100% - 24px)); padding: 20px; border: 3px solid #fff; border-radius: 26px; text-align: center; background: linear-gradient(145deg, #fff4d6, #ffd5df); color: #5a3b3c; box-shadow: 0 24px 70px rgba(0, 0, 0, .48); animation: result-pop .3s cubic-bezier(.2, 1.6, .5, 1); }
+.secret-result.is-lose { background: linear-gradient(145deg, #eef0ff, #d9d9ee); }
+.secret-result h2 { margin: 0; font: 36px 'Jua', sans-serif; }
+.secret-result p { margin: 8px 0; }
+.secret-skill-result { padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, .55); font-weight: 900; font-size: 12px; }
+.secret-result > button, .secret-result > div:last-child button { min-height: 46px; border: 0; border-radius: 14px; padding: 8px 18px; background: #f2b94e; color: #594127; font-weight: 900; }
+.secret-result > div:last-child { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.secret-result > div:last-child button:last-child { background: #f3aeb9; }
+.secret-stats { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 5px !important; margin: 12px 0; }
+.secret-stats span { display: grid; padding: 7px 3px; border-radius: 10px; background: rgba(255, 255, 255, .58); font-size: 10px; }
+.secret-stats b { font-size: 14px; }
+.secret-auto-next { padding: 9px; border-radius: 12px; background: rgba(255, 255, 255, .55); font-weight: 900; }
+.secret-result__victory { width: min(190px, 60%); max-height: 105px; object-fit: contain; margin: -12px auto 3px; }
+
+.secret-toast { position: fixed; z-index: 80; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 30px); padding: 10px 16px; border-radius: 999px; background: #192143; color: #fff; font-weight: 900; box-shadow: 0 8px 25px rgba(0, 0, 0, .3); }
+
+/* action-reaction sprite crops, reused for win/lose/check/call/raise/all_in/fold expressions */
+.secret-action-avatar { width: 54px; height: 54px; display: grid; place-items: center; }
+.secret-action-crop { position: relative; width: 100%; max-height: 100%; overflow: hidden; }
+.secret-action-crop img { position: absolute; max-width: none; object-fit: fill; }
+.secret-action-avatar.is-bouncy { animation: action-bounce .5s ease-out; }
+.secret-action-avatar.is-shaky { animation: action-shake .4s ease-out; }
+
+@keyframes badge-turn-bob { 50% { transform: translateY(-4px); } }
+@keyframes star-pop { 0% { transform: scale(1.35); color: #fff3c9; } 100% { transform: scale(1); } }
+@keyframes mask-wobble { 50% { transform: rotate(-8deg) translateY(-2px); } }
+@keyframes banner-pop { 0% { opacity: 0; transform: translateY(6px) scale(.85); } 10%, 82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); } }
+@keyframes pot-fly-up { 0% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -130px) scale(1.4); } }
+@keyframes pot-fly-down { 0% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, 130px) scale(1.4); } }
+@keyframes timer-critical { 50% { transform: scale(1.18); color: #fff; background: rgba(255, 90, 90, .5); } }
+@keyframes action-bounce { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-8px) scale(1.05); } 60% { transform: translateY(2px); } }
+@keyframes action-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+@keyframes result-pop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.7); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes pulse { 50% { transform: scale(.7); opacity: .55; } }
+
+@media (max-width: 760px) {
+  .minigame-hub { align-content: start; padding-top: 16px; }
+  .minigame-hub__logo { max-height: 190px; }
+  .minigame-hub__grid { grid-template-columns: 1fr; }
+  .minigame-select-card { grid-template-columns: 40% 1fr; border-radius: 24px; }
+  .secret-lobby { align-content: start; padding-top: 70px; }
+  .secret-lobby__card { grid-template-columns: 1fr; padding: 15px; text-align: center; }
+  .secret-lobby__card img { width: min(270px, 80vw); justify-self: center; }
+  .secret-lobby__card ul { text-align: left; }
+  .secret-lobby__actions { grid-template-columns: 1fr; }
+
+  .secret-room--table { padding: 6px 6px 16px; }
+  .secret-room__header b { font-size: 19px; }
+  .secret-room__header button { font-size: 10px; padding: 7px 9px; }
+  .secret-stage { gap: 7px; }
+  .secret-player-badge { width: min(300px, 100%); grid-template-columns: 46px 1fr auto; padding: 5px 8px; }
+  .secret-player-badge .avatar, .secret-action-avatar { width: 44px; height: 44px; }
+  .secret-flipcard { width: clamp(76px, 24vw, 104px); }
+  .secret-stage__mid { padding: 10px 6px; border-radius: 20px; }
+  .secret-mid__meta { gap: 8px; font-size: 10px; }
+  .secret-pot b { font-size: 19px; }
+  .secret-timer-badge { width: 26px; height: 26px; font-size: 11px; right: 8px; top: 8px; }
+  .secret-stage-label { font-size: 13px; }
+  .secret-actions { grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .secret-actions button { min-height: 44px; font-size: 11px; }
+  .secret-skills { grid-template-columns: repeat(3, 1fr); }
+  .secret-skill { min-height: 48px; }
+  .secret-reactions { grid-template-columns: repeat(3, 1fr); }
+  .secret-result { padding: 16px; }
+  .secret-result h2 { font-size: 29px; }
+  .secret-stats { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+@media (max-width: 390px) {
+  .minigame-select-card { grid-template-columns: 36% 1fr; padding: 10px; }
+  .secret-flipcard { width: 68px; }
+  .secret-player-badge { min-height: 50px; }
+  .secret-mid__meta span:nth-child(3) { display: none; }
+  .secret-actions button { min-height: 40px; }
+  .secret-reactions button { min-height: 32px; }
+  .secret-room__header small { display: none; }
+  .secret-skill small { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .secret-flipcard__inner, .secret-player-badge.is-active, .secret-star-count, .secret-banner, .secret-pot-fly, .secret-timer-badge.is-critical, .secret-action-avatar.is-bouncy, .secret-action-avatar.is-shaky, .secret-result { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

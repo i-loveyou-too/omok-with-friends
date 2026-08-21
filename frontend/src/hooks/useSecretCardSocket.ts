@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConnectionStatus, GameErrorEvent, PresenceEvent, Profile, ReactionEvent, SecretCardState, Session } from '../types'
+import type { ConnectionStatus, GameErrorEvent, PresenceEvent, Profile, ReactionEvent, SecretCardSkill, SecretCardState, Session } from '../types'
+
+export interface SkillUsedEvent {
+  eventId: string
+  roomId: string
+  playerId: string
+  skill: SecretCardSkill
+  targetPlayerId: string | null
+  serverTimestamp: number
+}
 
 type ServerMessage =
   | { type: 'joined'; token: string; playerId: string; reconnected: boolean }
   | { type: 'game_state'; state: SecretCardState }
   | ({ type: 'reaction' } & ReactionEvent)
+  | ({ type: 'skill_used' } & SkillUsedEvent)
   | { type: 'presence'; playerId: string; status: 'disconnected' | 'reconnected' }
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' | 'card_action_confirmed' | 'round_timeout' | 'reconnect_timeout' | 'auto_advanced'; eventId?: string }
@@ -23,12 +33,14 @@ export function useSecretCardSocket(roomCode: string, profile: Profile, onSessio
   const tokenRef = useRef(profile.token)
   const retryRef = useRef<number | undefined>(undefined)
   const reactionTimersRef = useRef(new Map<string, number>())
+  const skillTimersRef = useRef(new Map<string, number>())
   const noticeTimerRef = useRef<number | undefined>(undefined)
   const [state, setState] = useState<SecretCardState | null>(null)
   const [status, setStatus] = useState<ConnectionStatus>('connecting')
   const [selfId, setSelfId] = useState<string | null>(null)
   const [errorEvent, setErrorEvent] = useState<GameErrorEvent | null>(null)
   const [reactions, setReactions] = useState<ReactionEvent[]>([])
+  const [skillEvents, setSkillEvents] = useState<SkillUsedEvent[]>([])
   const [presence, setPresence] = useState<PresenceEvent | null>(null)
   const onSessionRef = useRef(onSession)
   const onRoomMissingRef = useRef(onRoomMissing)
@@ -40,6 +52,7 @@ export function useSecretCardSocket(roomCode: string, profile: Profile, onSessio
     let attempts = 0
     setState(null)
     setReactions([])
+    setSkillEvents([])
 
     const connect = () => {
       if (!active) return
@@ -64,6 +77,11 @@ export function useSecretCardSocket(roomCode: string, profile: Profile, onSessio
           setReactions((current) => [...current.filter((item) => item.id !== message.id), message])
           const timer = window.setTimeout(() => setReactions((current) => current.filter((item) => item.id !== message.id)), Math.max(0, message.expiresAt - message.createdAt))
           reactionTimersRef.current.set(message.id, timer)
+        } else if (message.type === 'skill_used') {
+          const skillEvent: SkillUsedEvent = { eventId: message.eventId, roomId: message.roomId, playerId: message.playerId, skill: message.skill, targetPlayerId: message.targetPlayerId, serverTimestamp: message.serverTimestamp }
+          setSkillEvents((current) => [...current.filter((item) => item.eventId !== skillEvent.eventId), skillEvent])
+          const timer = window.setTimeout(() => setSkillEvents((current) => current.filter((item) => item.eventId !== skillEvent.eventId)), 2600)
+          skillTimersRef.current.set(skillEvent.eventId, timer)
         } else if (message.type === 'presence') {
           setPresence({ ...message, nonce: Date.now() })
           if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
@@ -98,6 +116,8 @@ export function useSecretCardSocket(roomCode: string, profile: Profile, onSessio
       if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
       reactionTimersRef.current.forEach((timer) => window.clearTimeout(timer))
       reactionTimersRef.current.clear()
+      skillTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+      skillTimersRef.current.clear()
       socketRef.current?.close(1000)
     }
   }, [roomCode, profile.nickname, profile.character, profile.token])
@@ -112,5 +132,5 @@ export function useSecretCardSocket(roomCode: string, profile: Profile, onSessio
     return false
   }, [])
 
-  return { state, status, selfId, error: errorEvent?.message ?? null, reactions, presence, send }
+  return { state, status, selfId, error: errorEvent?.message ?? null, reactions, skillEvents, presence, send }
 }

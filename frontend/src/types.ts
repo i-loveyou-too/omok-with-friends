@@ -129,11 +129,37 @@ export interface SecretCardPlayer {
     raises: number
     folds: number
     allIns: number
+    skills: number
   }
 }
 
 export type SecretCardStatus = 'waiting' | 'playing' | 'round_finished' | 'game_finished' | 'finished'
 export type SecretCardAction = 'check' | 'call' | 'raise' | 'fold' | 'all_in'
+export type SecretCardSkill = 'hint' | 'poker_face' | 'pressure' | 'risk_bet' | 'insurance'
+
+export interface SecretCardSkillEntry {
+  cost: number
+  ready: boolean
+  cooldownEndsAt: number | null
+  usedThisRound: boolean
+  preferred: boolean
+}
+
+export interface SecretCardSkillsSnapshot {
+  hint: SecretCardSkillEntry
+  pokerFace: SecretCardSkillEntry
+  pressure: SecretCardSkillEntry
+  riskBet: SecretCardSkillEntry & { active: boolean; locked: boolean }
+  insurance: SecretCardSkillEntry
+  hintBand: 'low' | 'mid' | 'high' | null
+  pokerFaceActive: boolean
+  opponentPokerFaceActive: boolean
+}
+
+export interface SecretCardSkillResult {
+  insurance?: { playerId: string; refund: number }
+  riskBet?: { playerId: string; won: boolean; amount: number }
+}
 
 export interface SecretCardState {
   roomCode: string
@@ -159,6 +185,8 @@ export interface SecretCardState {
   gameWinnerId: string | null
   matchWinnerId: string | null
   lastAction: { playerId: string; action: string; amount: number; automatic?: boolean } | null
+  skillResult: SecretCardSkillResult | null
+  skills: SecretCardSkillsSnapshot | null
   rematchReady: string[]
   turnDurationSeconds: number
   turnStartedAt: number | null

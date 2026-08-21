@@ -20,6 +20,39 @@ ROUND_RESULT_DURATION_MS = 2200
 GAME_RESULT_DURATION_MS = 3000
 RAISE_AMOUNTS = {10, 50, 100}
 
+# --- Skill system -----------------------------------------------------
+# Every skill is server-authoritative: cost/cooldown/effect are all decided
+# here, the client only renders what the snapshot says. Each character gets
+# a small discount/edge on one "preferred" skill for flavor, not for a hard
+# balance split.
+SKILLS = {"hint", "poker_face", "pressure", "risk_bet", "insurance"}
+CHARACTER_PREFERRED_SKILL = {
+    "chiikawa": "insurance",   # 방어/보험
+    "hachiware": "hint",       # 정보/힌트
+    "usagi": "risk_bet",       # 공격/고위험
+    "momonga": "poker_face",   # 교란/블러프
+}
+HINT_COST = 15
+HINT_COST_PREFERRED = 8
+PRESSURE_COST = 10
+PRESSURE_COOLDOWN_MS = 10_000
+POKER_FACE_COOLDOWN_MS = 8_000
+POKER_FACE_COOLDOWN_MS_PREFERRED = 5_000
+POKER_FACE_DURATION_MS = 3_000
+INSURANCE_COST = 10
+INSURANCE_COST_PREFERRED = 5
+INSURANCE_REFUND_RATIO = 0.5
+INSURANCE_REFUND_RATIO_PREFERRED = 0.6
+RISK_BET_BONUS = 20
+
+
+def _card_band(card: int) -> str:
+    if card <= 3:
+        return "low"
+    if card <= 6:
+        return "mid"
+    return "high"
+
 
 @dataclass
 class SecretCardPlayer:
@@ -34,7 +67,10 @@ class SecretCardPlayer:
     raises: int = 0
     folds: int = 0
     all_ins: int = 0
+    skill_uses: int = 0
     last_reaction_at: float = field(default_factory=lambda: float("-inf"))
+    skill_cooldowns: Dict[str, int] = field(default_factory=dict)
+    poker_face_until: int = 0
 
     def public(self) -> dict:
         return {
@@ -45,7 +81,7 @@ class SecretCardPlayer:
             "chips": self.chips,
             "score": self.games_won,
             "roundWins": self.round_wins,
-            "stats": {"raises": self.raises, "folds": self.folds, "allIns": self.all_ins},
+            "stats": {"raises": self.raises, "folds": self.folds, "allIns": self.all_ins, "skills": self.skill_uses},
         }
 
 
@@ -76,6 +112,11 @@ class SecretCardState:
     reconnect_deadlines: Dict[str, int] = field(default_factory=dict)
     max_pot: int = 0
     last_active: float = field(default_factory=time.monotonic)
+    hint_bands: Dict[str, str] = field(default_factory=dict)
+    insurance_token: Optional[str] = None
+    risk_token: Optional[str] = None
+    round_skill_flags: Dict[str, Set[str]] = field(default_factory=dict)
+    round_skill_result: Optional[dict] = None
 
     def join(self, nickname: str, character: str, token: Optional[str] = None) -> SecretCardPlayer:
         nickname = nickname.strip()
@@ -190,6 +231,66 @@ class SecretCardState:
         self.last_active = time.monotonic()
         return self._event(playerId=player.public_id, action=action, amount=amount)
 
+    def use_skill(self, token: str, skill: str) -> dict:
+        player = self._player(token)
+        if skill not in SKILLS:
+            raise GameError("invalid_skill", "지원하지 않는 스킬이에요.")
+        if self.status != "playing":
+            raise GameError("skill_unavailable", "지금은 스킬을 사용할 수 없어요.")
+        opponent_token = self._opponent(token)
+        preferred = CHARACTER_PREFERRED_SKILL.get(player.character) == skill
+        now = epoch_ms()
+        used_this_round = self.round_skill_flags.setdefault(token, set())
+        target_player_id: Optional[str] = None
+
+        if skill == "hint":
+            if "hint" in used_this_round:
+                raise GameError("skill_already_used", "이번 라운드엔 이미 힌트를 봤어요.")
+            cost = HINT_COST_PREFERRED if preferred else HINT_COST
+            if player.chips < cost:
+                raise GameError("not_enough_chips", "별이 부족해요.")
+            player.chips -= cost
+            card = self.cards.get(token)
+            if card is not None:
+                self.hint_bands[token] = _card_band(card)
+            used_this_round.add("hint")
+        elif skill == "poker_face":
+            ready_at = player.skill_cooldowns.get("poker_face", 0)
+            if now < ready_at:
+                raise GameError("skill_cooldown", "아직 표정을 다시 숨길 수 없어요.")
+            cooldown = POKER_FACE_COOLDOWN_MS_PREFERRED if preferred else POKER_FACE_COOLDOWN_MS
+            player.poker_face_until = now + POKER_FACE_DURATION_MS
+            player.skill_cooldowns["poker_face"] = now + cooldown
+        elif skill == "pressure":
+            ready_at = player.skill_cooldowns.get("pressure", 0)
+            if now < ready_at:
+                raise GameError("skill_cooldown", "아직 압박을 다시 쓸 수 없어요.")
+            if player.chips < PRESSURE_COST:
+                raise GameError("not_enough_chips", "별이 부족해요.")
+            player.chips -= PRESSURE_COST
+            player.skill_cooldowns["pressure"] = now + PRESSURE_COOLDOWN_MS
+            target_player_id = self.players[opponent_token].public_id
+        elif skill == "risk_bet":
+            if "risk_bet" in used_this_round:
+                raise GameError("skill_already_used", "이번 라운드엔 이미 배팅을 강화했어요.")
+            if self.risk_token is not None and self.risk_token != token:
+                raise GameError("skill_unavailable", "이번 라운드는 상대가 이미 배팅을 강화했어요.")
+            self.risk_token = token
+            used_this_round.add("risk_bet")
+        elif skill == "insurance":
+            if "insurance" in used_this_round:
+                raise GameError("skill_already_used", "이번 라운드엔 이미 보험을 들었어요.")
+            cost = INSURANCE_COST_PREFERRED if preferred else INSURANCE_COST
+            if player.chips < cost:
+                raise GameError("not_enough_chips", "별이 부족해요.")
+            player.chips -= cost
+            self.insurance_token = token
+            used_this_round.add("insurance")
+
+        player.skill_uses += 1
+        self.last_active = time.monotonic()
+        return self._event(playerId=player.public_id, skill=skill, targetPlayerId=target_player_id)
+
     def request_next_round(self, token: str) -> bool:
         self._player(token)
         raise GameError("auto_progress", "다음 라운드는 결과 공개 후 자동으로 시작해요.")
@@ -292,12 +393,49 @@ class SecretCardState:
             "gameWinnerId": self.players[self.game_winner_token].public_id if self.game_winner_token else None,
             "matchWinnerId": self.players[self.match_winner_token].public_id if self.match_winner_token else None,
             "lastAction": self.last_action,
+            "skillResult": self.round_skill_result,
+            "skills": self._skills_snapshot(viewer_token, opponent_token),
             "rematchReady": [self.players[token].public_id for token in self.rematch_ready],
             "turnDurationSeconds": TURN_DURATION_SECONDS,
             "turnStartedAt": self.turn_started_at, "turnDeadline": self.turn_deadline,
             "transitionDeadline": self.transition_deadline,
             "reconnectDeadlines": {self.players[token].public_id: value for token, value in self.reconnect_deadlines.items()},
             "serverNow": epoch_ms(),
+        }
+
+    def _skills_snapshot(self, viewer_token: Optional[str], opponent_token: Optional[str]) -> Optional[dict]:
+        if not viewer_token or viewer_token not in self.players:
+            return None
+        player = self.players[viewer_token]
+        now = epoch_ms()
+        preferred_skill = CHARACTER_PREFERRED_SKILL.get(player.character)
+        used = self.round_skill_flags.get(viewer_token, set())
+
+        def cooldown_entry(skill: str, cost: int, ready_at: int) -> dict:
+            return {
+                "cost": cost,
+                "ready": now >= ready_at,
+                "cooldownEndsAt": ready_at if ready_at > now else None,
+                "usedThisRound": skill in used,
+                "preferred": preferred_skill == skill,
+            }
+
+        hint_cost = HINT_COST_PREFERRED if preferred_skill == "hint" else HINT_COST
+        insurance_cost = INSURANCE_COST_PREFERRED if preferred_skill == "insurance" else INSURANCE_COST
+        opponent_poker_face = bool(opponent_token and now < self.players[opponent_token].poker_face_until)
+        return {
+            "hint": cooldown_entry("hint", hint_cost, 0),
+            "pokerFace": cooldown_entry("poker_face", 0, player.skill_cooldowns.get("poker_face", 0)),
+            "pressure": cooldown_entry("pressure", PRESSURE_COST, player.skill_cooldowns.get("pressure", 0)),
+            "riskBet": {
+                **cooldown_entry("risk_bet", 0, 0),
+                "active": self.risk_token == viewer_token,
+                "locked": self.risk_token is not None and self.risk_token != viewer_token,
+            },
+            "insurance": cooldown_entry("insurance", insurance_cost, 0),
+            "hintBand": self.hint_bands.get(viewer_token),
+            "pokerFaceActive": now < player.poker_face_until,
+            "opponentPokerFaceActive": opponent_poker_face,
         }
 
     def _start_match(self) -> None:
@@ -307,7 +445,7 @@ class SecretCardState:
         self.max_pot = 0
         for player in self.players.values():
             player.games_won = 0
-            player.raises = player.folds = player.all_ins = 0
+            player.raises = player.folds = player.all_ins = player.skill_uses = 0
         self._start_game()
 
     def _start_game(self) -> None:
@@ -320,6 +458,8 @@ class SecretCardState:
         for player in self.players.values():
             player.chips = STARTING_CHIPS
             player.round_wins = 0
+            player.skill_cooldowns = {}
+            player.poker_face_until = 0
         self._start_round()
 
     def _start_round(self) -> None:
@@ -339,15 +479,43 @@ class SecretCardState:
         self.round_winner_token = None
         self.revealed = False
         self.transition_deadline = None
+        self.hint_bands = {}
+        self.insurance_token = None
+        self.risk_token = None
+        self.round_skill_flags = {}
+        self.round_skill_result = None
         now = epoch_ms()
         self.reconnect_deadlines = {token: now + RECONNECT_GRACE_SECONDS * 1000 for token in self.player_order if not self.players[token].connected}
         self._start_turn()
 
     def _resolve_round(self, winner_token: str, reason: str, actor_token: Optional[str] = None, automatic: bool = False) -> None:
+        loser_token = self._opponent(winner_token)
         self.round_winner_token = winner_token
         self.players[winner_token].round_wins += 1
         self.players[winner_token].chips += self.pot
         self.max_pot = max(self.max_pot, self.pot)
+
+        skill_result: Dict[str, object] = {}
+        if self.insurance_token == loser_token:
+            contributed = self.contributions.get(loser_token, 0)
+            preferred = CHARACTER_PREFERRED_SKILL.get(self.players[loser_token].character) == "insurance"
+            ratio = INSURANCE_REFUND_RATIO_PREFERRED if preferred else INSURANCE_REFUND_RATIO
+            refund = int(contributed * ratio)
+            if refund:
+                self.players[loser_token].chips += refund
+                skill_result["insurance"] = {"playerId": self.players[loser_token].public_id, "refund": refund}
+        if self.risk_token in (winner_token, loser_token):
+            bonus = min(RISK_BET_BONUS, self.players[loser_token].chips)
+            if bonus:
+                self.players[loser_token].chips -= bonus
+                self.players[winner_token].chips += bonus
+                skill_result["riskBet"] = {
+                    "playerId": self.players[self.risk_token].public_id,
+                    "won": self.risk_token == winner_token,
+                    "amount": bonus,
+                }
+        self.round_skill_result = skill_result or None
+
         self.revealed = True
         event_token = actor_token or winner_token
         self.last_action = {

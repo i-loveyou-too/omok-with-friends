@@ -42,6 +42,11 @@ class SecretCardActionMessage(StrictMessage):
     amount: Optional[int] = None
 
 
+class SecretCardSkillMessage(StrictMessage):
+    type: Literal["skill_action"]
+    skill: Literal["hint", "poker_face", "pressure", "risk_bet", "insurance"]
+
+
 class SecretCardSimpleMessage(StrictMessage):
     type: Literal["next_round", "rematch_request", "leave", "ping"]
 
@@ -53,6 +58,7 @@ SecretCardClientMessage = Union[
     JoinMessage,
     ReactionMessage,
     SecretCardActionMessage,
+    SecretCardSkillMessage,
     SecretCardSimpleMessage,
 ]
 secret_card_message_adapter = TypeAdapter(SecretCardClientMessage)
