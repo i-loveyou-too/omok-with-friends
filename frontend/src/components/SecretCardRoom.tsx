@@ -127,7 +127,7 @@ interface Props {
 
 export function SecretCardRoom({ roomCode, profile, onSession, onLeave, onRoomMissing }: Props) {
   const { state, status, selfId, error, reactions, skillEvents, presence, send } = useSecretCardSocket(roomCode, profile, onSession, onRoomMissing)
-  const cues = useSecretCardCues()
+  const { cue, muted, toggleMute } = useSecretCardCues()
   const [copied, setCopied] = useState(false)
   const [pending, setPending] = useState(false)
   const [pendingSkill, setPendingSkill] = useState<SecretCardSkill | null>(null)
@@ -175,17 +175,17 @@ export function SecretCardRoom({ roomCode, profile, onSession, onLeave, onRoomMi
     const key = `${state.roundNumber}-${state.lastAction.playerId}-${state.lastAction.action}-${state.lastAction.amount}`
     if (lastActionKeyRef.current === key) return
     lastActionKeyRef.current = key
-    cues('onAction', { action: state.lastAction.action, self: state.lastAction.playerId === self.id, amount: state.lastAction.amount })
-  }, [state?.lastAction, state?.roundNumber, self, cues])
+    cue('onAction', { action: state.lastAction.action, self: state.lastAction.playerId === self.id, amount: state.lastAction.amount })
+  }, [state?.lastAction, state?.roundNumber, self, cue])
 
   const revealedRef = useRef(false)
   useEffect(() => {
     if (phase === 'revealing' && !revealedRef.current && state) {
       revealedRef.current = true
-      cues('onReveal', { selfCard: state.cards.self, opponentCard: state.cards.opponent })
+      cue('onReveal', { selfCard: state.cards.self, opponentCard: state.cards.opponent })
     }
     if (phase === 'dealing') revealedRef.current = false
-  }, [phase, state, cues])
+  }, [phase, state, cue])
 
   const resultCuedRef = useRef<string | null>(null)
   const resultWinnerIdForCue = state?.matchWinnerId ?? state?.gameWinnerId ?? state?.roundWinnerId ?? null
@@ -195,26 +195,26 @@ export function SecretCardRoom({ roomCode, profile, onSession, onLeave, onRoomMi
     if (resultCuedRef.current === key) return
     resultCuedRef.current = key
     const scope = state?.status === 'finished' ? 'match' : state?.status === 'game_finished' ? 'game' : 'round'
-    cues(resultWinnerIdForCue === self.id ? 'onWin' : 'onLose', { scope })
-  }, [phase, resultWinnerIdForCue, self, state?.roundNumber, state?.status, cues])
+    cue(resultWinnerIdForCue === self.id ? 'onWin' : 'onLose', { scope })
+  }, [phase, resultWinnerIdForCue, self, state?.roundNumber, state?.status, cue])
 
   const skillCuedIdsRef = useRef(new Set<string>())
   useEffect(() => {
     for (const event of skillEvents) {
       if (skillCuedIdsRef.current.has(event.eventId)) continue
       skillCuedIdsRef.current.add(event.eventId)
-      cues('onSkill', { skill: event.skill, self: event.playerId === selfId })
+      cue('onSkill', { skill: event.skill, self: event.playerId === selfId })
     }
-  }, [skillEvents, selfId, cues])
+  }, [skillEvents, selfId, cue])
 
   const countdownCuedRef = useRef<number | null>(null)
   useEffect(() => {
     if (remaining == null) { countdownCuedRef.current = null; return }
     if ([10, 5, 3].includes(remaining) && countdownCuedRef.current !== remaining) {
       countdownCuedRef.current = remaining
-      cues('onCountdown', { secondsLeft: remaining })
+      cue('onCountdown', { secondsLeft: remaining })
     }
-  }, [remaining, cues])
+  }, [remaining, cue])
 
   const available = useMemo(() => ({
     check: myTurn && owed === 0,
@@ -267,6 +267,7 @@ export function SecretCardRoom({ roomCode, profile, onSession, onLeave, onRoomMi
     return (
       <main className="secret-room secret-room--waiting">
         <button className="secret-back" type="button" onClick={leave}>← 나가기</button>
+        <button type="button" className="secret-audio-toggle secret-audio-toggle--floating" aria-pressed={!muted} onClick={toggleMute}>{muted ? '🔇' : '🔊'}</button>
         <section className="secret-waiting-card">
           <p>비밀카드 방 코드</p><h1>{roomCode}</h1>
           <PlayerBadge player={self} self />
@@ -317,7 +318,10 @@ export function SecretCardRoom({ roomCode, profile, onSession, onLeave, onRoomMi
       <header className="secret-room__header">
         <button type="button" onClick={leave}>← 게임방</button>
         <div><b>두근두근 비밀카드</b><small>ROOM {roomCode}</small></div>
-        <button type="button" onClick={copyInvite}>{copied ? '완료!' : '초대 링크'}</button>
+        <div className="secret-header-end">
+          <button type="button" className="secret-audio-toggle" aria-pressed={!muted} onClick={toggleMute}>{muted ? '🔇' : '🔊'}</button>
+          <button type="button" onClick={copyInvite}>{copied ? '완료!' : '초대 링크'}</button>
+        </div>
       </header>
 
       <section className="secret-stage">

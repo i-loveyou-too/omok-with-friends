@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { characterAssets } from '../assets/characters/manifest'
+import { subscribeGameBgm } from '../hooks/gameAudioStore'
 import type { CharacterId } from '../types'
 import { CharacterAvatar } from './CharacterAvatar'
 import { HomeBoardDecoration } from './HomeBoardDecoration'
@@ -56,6 +57,9 @@ export function Lobby({ onEnter }: Props) {
   useEffect(() => {
     HERO_CHARACTERS.forEach((character) => previousHeroAsset.set(character, heroAssets[character].src))
   }, [heroAssets])
+
+  // Shared BGM singleton: keeps playing (or stays muted) the same as the hub and every other room.
+  useEffect(() => subscribeGameBgm(), [])
 
   const createRoom = async () => {
     setBusy(true)

@@ -1,4 +1,5 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
+import { subscribeGameBgm } from '../hooks/gameAudioStore'
 
 const APP_BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? `${APP_BASE}/api`
@@ -12,6 +13,9 @@ export function SecretCardLobby({ onEnter, onBack }: Props) {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  // Shared BGM singleton: keeps playing (or stays muted) the same as the hub and every other room.
+  useEffect(() => subscribeGameBgm(), [])
 
   const createRoom = async () => {
     setBusy(true)

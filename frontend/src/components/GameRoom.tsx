@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { preloadCharacterAssets } from '../assets/characters/manifest'
-import { useGameAudio } from '../hooks/useGameAudio'
+import { useGameAudio, type AudioEffectConfig } from '../hooks/useGameAudio'
 import { useGameSocket } from '../hooks/useGameSocket'
 import { useTurnCountdown } from '../hooks/useTurnCountdown'
 import type { Point, Profile, Session } from '../types'
@@ -13,6 +13,14 @@ import { ResultPanel } from './ResultPanel'
 const REACTIONS = ['ㅋㅋㅋ', '헉!', '잠깐!!', '잘못뒀어ㅠ', '하품~', '빨리하세욧!', '👏', '😡']
 const MOVE_ERROR_CODES = new Set(['occupied', 'wrong_turn', 'forbidden', 'first_move_center', 'game_not_playing', 'turn_expired'])
 const APP_BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
+
+type GameEffect = 'chatBubble' | 'stonePlace' | 'undoRequest'
+const AUDIO_BASE = `${import.meta.env.BASE_URL}audio/`
+const EFFECTS: Record<GameEffect, AudioEffectConfig> = {
+  chatBubble: { src: `${AUDIO_BASE}chat-pop.wav`, volume: 0.7 },
+  stonePlace: { src: `${AUDIO_BASE}stone-place.wav`, volume: 0.72 },
+  undoRequest: { src: `${AUDIO_BASE}undo-request.wav`, volume: 0.78 },
+}
 
 interface Props {
   roomCode: string
@@ -40,7 +48,13 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
     state, status, selfId, error, errorEvent, reactions, presence,
     moveConfirmed, playerAwakened, undoRequested, undoResult, turnTimeout, send,
   } = useGameSocket(roomCode, profile, onSession, onRoomMissing)
-  const { muted, needsGesture, startBgm, toggleMute, playEffect } = useGameAudio()
+  const { muted, toggleMute, playEffect: playEffectRaw } = useGameAudio<GameEffect>(EFFECTS)
+  const playedIdsRef = useRef(new Set<string>())
+  const playEffect = useCallback((effect: GameEffect, eventId: string) => {
+    if (playedIdsRef.current.has(eventId)) return
+    playedIdsRef.current.add(eventId)
+    playEffectRaw(effect)
+  }, [playEffectRaw])
   const [copied, setCopied] = useState(false)
   const [lastReactionAt, setLastReactionAt] = useState(0)
   const [candidate, setCandidate] = useState<Point | null>(null)
@@ -243,7 +257,6 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
           <button className="invite-button" onClick={copyInvite}><span>↗</span>{copied ? '초대 링크를 복사했어요!' : '초대 링크 복사'}</button>
           <button className="waiting-leave" onClick={() => leaveRoom(false)}>방 나가기</button>
         </section>
-        {needsGesture && !muted && <button className="audio-hint" onClick={() => void startBgm()}>화면을 눌러 음악 켜기 ♪</button>}
         {(error || presence) && <div className="toast" role="status">{error ?? (presence?.status === 'reconnected' ? '다시 왔어요!' : '연결 끊김…')}</div>}
       </main>
     )
@@ -282,7 +295,6 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
         </div>
       </header>
 
-      {needsGesture && !muted && <button className="audio-hint" onClick={() => void startBgm()}>화면을 눌러 음악 켜기 ♪</button>}
       {systemNotice && <div className="system-notice" key={systemNotice.id} role="status">{systemNotice.text}</div>}
 
       <section className={`game-layout ${ended ? 'game-layout--result' : ''}`}>
