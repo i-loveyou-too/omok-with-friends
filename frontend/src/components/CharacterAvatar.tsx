@@ -27,9 +27,7 @@ export function CharacterAvatar({ character, mood = 'idle', active, reaction, re
   const reactionKind = reaction ? reactionKindByValue[reaction] : undefined
   const displayed = displayAsset
     ? { src: displayAsset.src, stateLabel: displayAsset.stateLabel, awakenedFallback: false }
-    : reactionKind
-      ? { src: config.reactions[reactionKind], stateLabel: `reaction-${reactionKind}`, awakenedFallback: false }
-      : getDisplayedCharacterAsset({ character, mood, temporaryReaction, awakened })
+    : getDisplayedCharacterAsset({ character, mood, temporaryReaction, reaction: reactionKind, awakened })
   return (
     <div className={`avatar avatar--${config.theme} ${active ? 'is-active' : ''} ${awakened ? 'is-awakened' : ''} ${displayed.awakenedFallback ? 'is-awakened-fallback' : ''}`}>
       {reaction && showReactionBubble && <span className="reaction-bubble" key={`${reaction}-${reactionNonce ?? 0}`}>{reaction}</span>}

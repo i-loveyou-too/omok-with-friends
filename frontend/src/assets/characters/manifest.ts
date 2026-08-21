@@ -13,6 +13,7 @@ export type CharacterMood =
 
 export type ReactionKind = 'laugh' | 'surprised' | 'wait' | 'mistake' | 'clap' | 'angry'
 export type TemporaryCharacterReaction = 'yawn' | null
+export type CharacterReactionKind = ReactionKind | Exclude<TemporaryCharacterReaction, null>
 
 export interface CharacterAsset {
   id: CharacterId
@@ -21,6 +22,7 @@ export interface CharacterAsset {
   theme: 'pink' | 'sky' | 'lilac' | 'yellow'
   poses: Record<CharacterMood, string>
   reactions: Record<ReactionKind, string>
+  spicyReactions: Partial<Record<CharacterReactionKind, string>>
   special: {
     yawn: string
     awakened: string
@@ -78,6 +80,15 @@ function character(
       clap: sprite(id, 'reaction-clap'),
       angry: sprite(id, 'reaction-angry'),
     },
+    spicyReactions: {
+      laugh: optionalSprite(id, 'spicy-reaction-laugh') ?? undefined,
+      surprised: optionalSprite(id, 'spicy-reaction-surprised') ?? undefined,
+      wait: optionalSprite(id, 'spicy-reaction-wait') ?? undefined,
+      mistake: optionalSprite(id, 'spicy-reaction-mistake') ?? undefined,
+      yawn: optionalSprite(id, 'spicy-reaction-yawn') ?? undefined,
+      clap: optionalSprite(id, 'spicy-reaction-clap') ?? undefined,
+      angry: optionalSprite(id, 'spicy-reaction-angry') ?? undefined,
+    },
     special: {
       yawn: sprite(id, 'reaction-yawn'),
       awakened: optionalSprite(id, 'spicy-awakened') ?? sprite(id, 'reaction-angry'),
@@ -93,11 +104,12 @@ export const characterAssets: Record<CharacterId, CharacterAsset> = {
   usagi: character('usagi', '우사기', '우', 'yellow'),
 }
 
-export const reactionKindByValue: Record<string, ReactionKind> = {
+export const reactionKindByValue: Record<string, CharacterReactionKind> = {
   'ㅋㅋㅋ': 'laugh',
   '헉!': 'surprised',
   '잠깐!!': 'wait',
   '잘못뒀어ㅠ': 'mistake',
+  '하품~': 'yawn',
   '👏': 'clap',
   '😡': 'angry',
 }
@@ -106,18 +118,30 @@ interface DisplayedCharacterAssetOptions {
   character: CharacterId
   mood: CharacterMood
   temporaryReaction?: TemporaryCharacterReaction
+  reaction?: CharacterReactionKind
   awakened?: boolean
+}
+
+function regularReactionAsset(config: CharacterAsset, reaction: CharacterReactionKind) {
+  return reaction === 'yawn' ? config.special.yawn : config.reactions[reaction]
 }
 
 export function getDisplayedCharacterAsset({
   character,
   mood,
   temporaryReaction = null,
+  reaction,
   awakened = false,
 }: DisplayedCharacterAssetOptions) {
   const config = characterAssets[character]
-  if (temporaryReaction === 'yawn') {
-    return { src: config.special.yawn, stateLabel: 'yawn', awakenedFallback: false }
+  const displayedReaction = reaction ?? temporaryReaction
+  if (displayedReaction) {
+    const spicyReaction = awakened ? config.spicyReactions[displayedReaction] : undefined
+    return {
+      src: spicyReaction ?? regularReactionAsset(config, displayedReaction),
+      stateLabel: `${spicyReaction ? 'spicy-' : ''}reaction-${displayedReaction}`,
+      awakenedFallback: false,
+    }
   }
   if (awakened) {
     return {
@@ -135,6 +159,9 @@ export function preloadCharacterAssets(characterIds: CharacterId[]) {
     const config = characterAssets[id]
     Object.values(config.poses).forEach((url) => urls.add(url))
     Object.values(config.reactions).forEach((url) => urls.add(url))
+    Object.values(config.spicyReactions).forEach((url) => {
+      if (url) urls.add(url)
+    })
     Object.values(config.special).forEach((url) => {
       if (typeof url === 'string') urls.add(url)
     })

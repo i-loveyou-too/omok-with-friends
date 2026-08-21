@@ -36,5 +36,23 @@ class UndoResponseMessage(StrictMessage):
     accept: bool
 
 
+class SecretCardActionMessage(StrictMessage):
+    type: Literal["card_action"]
+    action: Literal["check", "call", "raise", "fold", "all_in"]
+    amount: Optional[int] = None
+
+
+class SecretCardSimpleMessage(StrictMessage):
+    type: Literal["next_round", "rematch_request", "leave", "ping"]
+
+
 ClientMessage = Union[JoinMessage, MoveMessage, ReactionMessage, SimpleMessage, UndoResponseMessage]
 client_message_adapter = TypeAdapter(ClientMessage)
+
+SecretCardClientMessage = Union[
+    JoinMessage,
+    ReactionMessage,
+    SecretCardActionMessage,
+    SecretCardSimpleMessage,
+]
+secret_card_message_adapter = TypeAdapter(SecretCardClientMessage)
