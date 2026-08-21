@@ -126,6 +126,10 @@ function regularReactionAsset(config: CharacterAsset, reaction: CharacterReactio
   return reaction === 'yawn' ? config.special.yawn : config.reactions[reaction]
 }
 
+// Priority when awakened: temporary/normal spicy reaction > awakened idle > normal.
+// A reaction while awakened must never silently show the plain (non-spicy) reaction art —
+// if this character has no dedicated spicy crop for that specific reaction yet, hold the
+// awakened idle pose (still on fire) instead of falling all the way back to "normal".
 export function getDisplayedCharacterAsset({
   character,
   mood,
@@ -135,13 +139,20 @@ export function getDisplayedCharacterAsset({
 }: DisplayedCharacterAssetOptions) {
   const config = characterAssets[character]
   const displayedReaction = reaction ?? temporaryReaction
-  if (displayedReaction) {
-    const spicyReaction = awakened ? config.spicyReactions[displayedReaction] : undefined
-    return {
-      src: spicyReaction ?? regularReactionAsset(config, displayedReaction),
-      stateLabel: `${spicyReaction ? 'spicy-' : ''}reaction-${displayedReaction}`,
-      awakenedFallback: false,
+
+  if (displayedReaction && awakened) {
+    const spicyReaction = config.spicyReactions[displayedReaction]
+    if (spicyReaction) {
+      return { src: spicyReaction, stateLabel: `spicy-reaction-${displayedReaction}`, awakenedFallback: false }
     }
+    return {
+      src: config.special.awakened,
+      stateLabel: 'spicy-awakened',
+      awakenedFallback: !config.special.hasAwakenedAsset,
+    }
+  }
+  if (displayedReaction) {
+    return { src: regularReactionAsset(config, displayedReaction), stateLabel: `reaction-${displayedReaction}`, awakenedFallback: false }
   }
   if (awakened) {
     return {

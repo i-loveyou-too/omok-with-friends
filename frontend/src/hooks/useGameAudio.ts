@@ -32,7 +32,9 @@ export function useGameAudio<T extends string>(effects: Record<T, AudioEffectCon
   }, [])
 
   const playEffect = useCallback((effect: T) => {
-    if (isGameBgmMuted()) return
+    // SFX are intentionally independent of the BGM mute flag — muting the music should never
+    // silence stone-place/win/etc. cues. `muted` here only tracks BGM for callers that render
+    // a combined toggle button.
     const config = effects[effect]
     if (!config) return
     const audio = new Audio(config.src)

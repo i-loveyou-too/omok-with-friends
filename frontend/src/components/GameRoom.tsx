@@ -198,6 +198,16 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
     if (send({ type: 'move', row: candidate.row, col: candidate.col })) setMoveSubmitting(true)
   }
 
+  // Rendered twice: once beside the board for desktop (inside .action-panel, which the
+  // existing ≤1050px rule already hides), once directly under the board for mobile (inside
+  // .board-panel, hidden on desktop instead). Only one copy is ever visible at a time.
+  const renderMoveConfirmBar = (variant: 'desktop' | 'mobile') => (
+    <div className={`move-confirm-bar move-confirm-bar--${variant} ${candidateForbidden ? 'is-forbidden' : ''}`}>
+      <span>{candidateMessage}</span>
+      <button disabled={!candidate || Boolean(candidateForbidden) || boardDisabled} onClick={confirmMove}>{moveSubmitting ? '확인 중…' : '여기에 놓기'}</button>
+    </div>
+  )
+
   const respondUndo = (accept: boolean) => {
     if (undoResponding || status !== 'connected') return
     if (send({ type: 'undo_response', accept })) setUndoResponding(true)
@@ -221,8 +231,8 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
   }
 
   const soundButton = (
-    <button className="sound-toggle" type="button" onClick={toggleMute} aria-label={muted ? '전체 소리 켜기' : '전체 소리 끄기'}>
-      <span aria-hidden="true">{muted ? '🔇' : '🔊'}</span><b>{muted ? '소리 켜기' : '소리 끄기'}</b>
+    <button className="sound-toggle" type="button" onClick={toggleMute} aria-label={muted ? 'BGM 켜기' : 'BGM 끄기'}>
+      <span aria-hidden="true">{muted ? '🔇' : '🔊'}</span><b>{muted ? 'BGM 켜기' : 'BGM 끄기'}</b>
     </button>
   )
 
@@ -318,16 +328,12 @@ export function GameRoom({ roomCode, profile, onSession, onLeave, onRoomMissing 
           )}
           {resultPanel && <div className="board-result-overlay" role="dialog" aria-modal="true"><div className="board-result-dim" aria-hidden="true" />{resultPanel}</div>}
           <Board board={state.board} forbidden={forbidden} lastMove={state.lastMove} winningLine={state.winningLine} centerOnly={state.firstMoveCenterOnly} candidate={candidate} candidateColor={self?.color ?? null} disabled={boardDisabled} onMove={(row, col) => setCandidate({ row, col })} />
-          {!ended && (
-            <div className={`move-confirm-bar ${candidateForbidden ? 'is-forbidden' : ''}`}>
-              <span>{candidateMessage}</span>
-              <button disabled={!candidate || Boolean(candidateForbidden) || boardDisabled} onClick={confirmMove}>{moveSubmitting ? '확인 중…' : '여기에 놓기'}</button>
-            </div>
-          )}
+          {!ended && renderMoveConfirmBar('mobile')}
         </section>
 
         {!ended && (
           <aside className="action-panel">
+            {renderMoveConfirmBar('desktop')}
             <div className="reaction-box"><h2>한마디 톡!</h2><div>{REACTIONS.map((item) => <button key={item} onClick={() => sendReaction(item)}>{item}</button>)}</div></div>
             <button className="spicy-curry-button" disabled={spicyCurryDisabled} onClick={useSpicyCurry}>{selfAwakened ? '🔥 각성중' : spicySubmitting ? '🔥 각성 중…' : '🌶️ 매운카레'}</button>
             <div className="utility-actions">
