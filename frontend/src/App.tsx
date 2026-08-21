@@ -8,7 +8,7 @@ import type { Profile, Session } from './types'
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '/omokwithfriend/api'
 
 function roomFromPath(): { roomCode: string | null; invalidRoomPath: boolean } {
-  const match = location.pathname.match(/\/omok\/room\/([^/?#]+)/i)
+  const match = location.pathname.match(/\/omokwithfriend\/room\/([^/?#]+)/i)
   if (!match) return { roomCode: null, invalidRoomPath: false }
   const candidate = decodeURIComponent(match[1]).trim().toUpperCase()
   if (/^[A-Z0-9]{5}$/.test(candidate)) return { roomCode: candidate, invalidRoomPath: false }
