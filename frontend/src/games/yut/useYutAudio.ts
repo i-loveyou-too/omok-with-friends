@@ -63,8 +63,24 @@ export function useYutAudio(state: YutState | null, selfId: string | null) {
       bgm.current.volume = isMobile() ? 0.12 : 0.22
       document.body.append(bgm.current)
     }
-    void bgm.current.play().catch(() => undefined)
+    void bgm.current.play().catch((error) => {
+      console.warn('[YUT BGM] play failed', error)
+    })
   }, [sourceUrl])
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      startBgm()
+    }
+
+    window.addEventListener('pointerdown', unlockAudio, { passive: true })
+    window.addEventListener('keydown', unlockAudio)
+
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio)
+      window.removeEventListener('keydown', unlockAudio)
+    }
+  }, [startBgm])
 
   const play = useCallback((name: YutSound) => {
     startBgm()
@@ -82,14 +98,17 @@ export function useYutAudio(state: YutState | null, selfId: string | null) {
   }, [sourceUrl, startBgm])
 
   const toggleBgm = useCallback(() => {
-    setBgmEnabled((enabled) => {
-      const next = !enabled
-      localStorage.setItem('yut-bgm-enabled', String(next))
-      bgmEnabledRef.current = next
-      if (next) window.setTimeout(startBgm, 0)
-      else bgm.current?.pause()
-      return next
-    })
+    const next = !bgmEnabledRef.current
+
+    localStorage.setItem('yut-bgm-enabled', String(next))
+    bgmEnabledRef.current = next
+    setBgmEnabled(next)
+
+    if (next) {
+      startBgm()
+    } else {
+      bgm.current?.pause()
+    }
   }, [startBgm])
 
   const toggleSfx = useCallback(() => {
