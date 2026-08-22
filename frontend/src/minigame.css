@@ -33,3 +33,16 @@
 .minigame-select-card--yut{background:linear-gradient(145deg,#f8e7a7,#b9dfa8);color:#42552f}
 .minigame-select-card h2{font-size:clamp(24px,3vw,34px)}
 @media(max-width:760px){.minigame-hub__grid{grid-template-columns:1fr}}
+
+/* Pot candy pile: a capped (<=14 node), index-stable scatter of star-candy glyphs standing
+   in for state.pot. Growing the pot only ever adds a candy in its own fixed slot, so nothing
+   already on screen re-shuffles, and there's no risk of runaway DOM growth on a big pot. */
+.secret-pot-pile{position:relative;height:52px;margin:0 0 8px;pointer-events:none}
+.secret-pot-pile.is-empty{height:22px;display:grid;place-items:center}
+.secret-pot-pile.is-empty::after{content:'별사탕을 기다리는 중…';font-size:10px;font-weight:800;color:#8792b3}
+.secret-pot-candy{position:absolute;bottom:0;left:0;transform:translate(-50%,50%);line-height:1}
+.secret-pot-candy>b{display:inline-block;font-style:normal;font-size:19px;transform:rotate(var(--rot)) scale(var(--scale));filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));animation:secret-pot-candy-pop .3s cubic-bezier(.2,1.5,.4,1) both}
+.secret-pot-pile.is-rich .secret-pot-candy>b{font-size:22px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4)) drop-shadow(0 0 7px rgba(255,211,110,.65))}
+@keyframes secret-pot-candy-pop{from{opacity:0;transform:rotate(var(--rot)) scale(0)}to{opacity:1;transform:rotate(var(--rot)) scale(var(--scale))}}
+@media(max-width:760px){.secret-pot-pile{height:42px}.secret-pot-candy>b{font-size:16px}.secret-pot-pile.is-rich .secret-pot-candy>b{font-size:18px}}
+@media(prefers-reduced-motion:reduce){.secret-pot-candy>b{animation:none}}

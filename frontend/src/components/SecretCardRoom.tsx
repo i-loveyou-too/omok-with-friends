@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { Profile, ReactionEvent, SecretCardAction, SecretCardPlayer, Session } from '../types'
 import { useSecretCardSocket } from '../hooks/useSecretCardSocket'
 import { useTurnCountdown } from '../hooks/useTurnCountdown'
@@ -6,6 +6,50 @@ import { CharacterAvatar } from './CharacterAvatar'
 
 const REACTIONS = ['ㅋㅋㅋ', '헉!', '잠깐!!', '잘못뒀어ㅠ', '👏', '😡']
 type DisplayAction = 'check' | 'call' | 'raise' | 'all_in' | 'fold' | 'win' | 'lose'
+
+// Fixed scatter of up to 14 candy slots (a hand-tuned little "mound" shape). Capped and
+// preset on purpose — this stays O(1) DOM nodes regardless of pot size, and because the
+// slots are stable by index, growing the pot only ever *adds* a candy in place rather than
+// re-shuffling ones already on screen.
+const POT_CANDY_SLOTS: Array<{ left: number; bottom: number; rot: number; scale: number }> = [
+  { left: 46, bottom: 4, rot: -8, scale: 1.15 },
+  { left: 54, bottom: 6, rot: 10, scale: 1.1 },
+  { left: 40, bottom: 14, rot: -18, scale: 1 },
+  { left: 60, bottom: 15, rot: 16, scale: 1 },
+  { left: 50, bottom: 22, rot: 4, scale: 1.05 },
+  { left: 33, bottom: 8, rot: 20, scale: 0.95 },
+  { left: 66, bottom: 9, rot: -14, scale: 0.95 },
+  { left: 44, bottom: 30, rot: -6, scale: 0.9 },
+  { left: 56, bottom: 30, rot: 12, scale: 0.9 },
+  { left: 28, bottom: 18, rot: -24, scale: 0.85 },
+  { left: 71, bottom: 19, rot: 22, scale: 0.85 },
+  { left: 50, bottom: 38, rot: 0, scale: 0.85 },
+  { left: 20, bottom: 6, rot: 30, scale: 0.8 },
+  { left: 79, bottom: 7, rot: -28, scale: 0.8 },
+]
+const POT_RICH_THRESHOLD = 300
+
+function potCandyCount(pot: number) {
+  if (pot <= 0) return 0
+  return Math.min(POT_CANDY_SLOTS.length, Math.max(1, Math.round(2 + Math.sqrt(pot) / 2.2)))
+}
+
+function PotPile({ pot }: { pot: number }) {
+  const count = potCandyCount(pot)
+  return (
+    <div
+      className={`secret-pot-pile ${pot >= POT_RICH_THRESHOLD ? 'is-rich' : ''} ${count === 0 ? 'is-empty' : ''}`}
+      role="img"
+      aria-label={count > 0 ? `팟에 별사탕이 ⭐ ${pot}개 쌓여 있어요` : '팟이 비어 있어요'}
+    >
+      {POT_CANDY_SLOTS.slice(0, count).map((slot, index) => (
+        <span key={index} className="secret-pot-candy" style={{ left: `${slot.left}%`, bottom: `${slot.bottom}%` }} aria-hidden="true">
+          <b style={{ '--rot': `${slot.rot}deg`, '--scale': slot.scale } as CSSProperties}>⭐</b>
+        </span>
+      ))}
+    </div>
+  )
+}
 
 interface Props {
   roomCode: string
@@ -61,9 +105,11 @@ function SecretActionAvatar({ player, action }: { player: SecretCardPlayer; acti
 
 function PlayerBadge({ player, self, active, reaction, displayAction }: { player?: SecretCardPlayer; self?: boolean; active?: boolean; reaction?: ReactionEvent; displayAction?: DisplayAction }) {
   if (!player) return <div className="secret-player-badge is-empty">친구를 기다리는 중…</div>
+  // A reaction is a brief (~2.8s), self-expiring event — it should always be visible the
+  // moment it arrives, even mid-betting-action, so it must win over the action-pose crop.
   return (
     <div className={`secret-player-badge ${active ? 'is-active' : ''} ${!player.connected ? 'is-offline' : ''}`}>
-      {displayAction
+      {!reaction && displayAction
         ? <SecretActionAvatar player={player} action={displayAction} />
         : <CharacterAvatar character={player.character} mood={active ? 'myTurn' : 'waiting'} reaction={reaction?.value} reactionNonce={reaction?.createdAt} />}
       <div><b>{player.nickname}</b><small>{self ? '나' : '친구'} · {player.connected ? '접속 중' : '재접속 대기'}</small></div>
@@ -163,6 +209,7 @@ export function SecretCardRoom({ roomCode, profile, onSession, onLeave, onRoomMi
           <span>상대 카드는 보여요</span>
         </div>
         <section className="secret-table-panel">
+          <PotPile pot={state.pot} />
           <div className="secret-round-strip">
             <span>팟 <b>⭐ {state.pot}</b></span><span>판 <b>{state.gameNumber} / {state.maxGames}</b></span><span>라운드 <b>{state.roundNumber} / {state.maxRounds}</b></span><span>스코어 <b>{self.score} : {opponent?.score ?? 0}</b></span><span>남은 시간 <b>{remaining ?? '—'}초</b></span>
           </div>
