@@ -124,11 +124,6 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
   const contestedLocations = new Set(
     [...ownersByLocation.entries()].filter(([, owners]) => owners.size > 1).map(([location]) => location),
   )
-  const selfPlayer = state.players.find((player) => player.id === selfId)
-  const opponent = state.players.find((player) => player.id !== selfId)
-  const selfHome = state.pieces.filter((piece) => piece.ownerId === selfId && piece.location === 'S' && !piece.finished)
-  const opponentHome = state.pieces.filter((piece) => piece.ownerId === opponent?.id && piece.location === 'S' && !piece.finished)
-  const finishedCount = state.pieces.filter((piece) => piece.finished).length
 
   const selectable = (piece: YutPiece) => {
     if (!selectionMode || piece.finished) return false
@@ -145,6 +140,20 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
         </svg>
         {[...OUTER_KEYS.filter((key) => key !== 'S'), ...INNER_KEYS].map((key) => {
           const [x, y] = BOARD_POSITIONS[key]
+
+          if (key === 'O20') {
+            return (
+              <img
+                key={key}
+                className="yut-node yut-node--start-finish"
+                src={yutAssets.ui.startFinish}
+                alt="출발·도착"
+                style={{ left: `${x}%`, top: `${y}%` }}
+                draggable={false}
+              />
+            )
+          }
+
           const kind: YutTileKind = jackpot.has(key) ? 'jackpot' : danger.has(key) ? 'danger' : lucky.has(key) ? 'lucky' : 'normal'
           const label = kind === 'jackpot' ? '대박칸' : kind === 'danger' ? '위험칸' : kind === 'lucky' ? '행운칸' : '일반칸'
           return <img key={key} className={`yut-node ${kind}`} src={yutTileAsset(kind)} alt={label} style={{ left: `${x}%`, top: `${y}%` }} draggable={false} />
@@ -174,28 +183,6 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
           const owner = state.players.find((player) => player.id === ghost.piece.ownerId)
           return <span key={ghost.key} className={`yut-piece yut-piece-ghost is-${ghost.kind}`} style={{ left: `${x}%`, top: `${y}%` }}>{owner && <CharacterAvatar character={owner.character} />}</span>
         })}
-      </div>
-      <div className="yut-board-docks">
-        <div className="yut-home yut-home--me">
-          <div
-            className="yut-start-finish-badge"
-            aria-label={`출발·도착 지점, 도착한 말 ${finishedCount}개`}
-          >
-            <img src={yutAssets.ui.startFinish} alt="출발·도착" />
-            {finishedCount > 0 && (
-              <b className="yut-start-finish-count">{finishedCount}</b>
-            )}
-          </div>
-          <div className="yut-home-pieces">
-            {selfHome.map((homePiece) => <button key={homePiece.id} aria-label={`내 말 ${homePiece.id + 1}`} disabled={!selectable(homePiece)} onClick={() => onSelect(homePiece)}>{selfPlayer && <CharacterAvatar character={selfPlayer.character} />}</button>)}
-          </div>
-        </div>
-        <div className="yut-home yut-home--them">
-          <b>상대<br />출발</b>
-          <div className="yut-home-pieces">
-            {opponentHome.map((homePiece) => <span key={homePiece.id}>{opponent && <CharacterAvatar character={opponent.character} />}</span>)}
-          </div>
-        </div>
       </div>
     </div>
   )
