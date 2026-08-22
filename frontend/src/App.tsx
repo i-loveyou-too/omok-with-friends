@@ -6,6 +6,7 @@ import { MinigameHub } from './components/MinigameHub'
 import { ProfileForm } from './components/ProfileForm'
 import { SecretCardLobby } from './components/SecretCardLobby'
 import { SecretCardRoom } from './components/SecretCardRoom'
+import { YutApp } from './games/yut/YutApp'
 import type { Profile, Session } from './types'
 
 const APP_BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
@@ -14,6 +15,7 @@ const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(
 type Route =
   | { kind: 'hub' }
   | { kind: 'omok' }
+  | { kind: 'yut' }
   | { kind: 'secret-card' }
   | { kind: 'omok-room'; roomCode: string | null; invalid: boolean }
   | { kind: 'secret-card-room'; roomCode: string | null; invalid: boolean }
@@ -22,6 +24,7 @@ function routeFromPath(): Route {
   const normalized = location.pathname.replace(/\/+$/, '') || '/'
   if (normalized === APP_BASE || normalized === '/') return { kind: 'hub' }
   if (normalized === `${APP_BASE}/omok`) return { kind: 'omok' }
+  if (normalized === `${APP_BASE}/yut` || normalized.startsWith(`${APP_BASE}/yut/`)) return { kind: 'yut' }
   if (normalized === `${APP_BASE}/secret-card`) return { kind: 'secret-card' }
   const escaped = APP_BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const secretMatch = location.pathname.match(new RegExp(`${escaped}/secret-card/room/([^/?#]+)`, 'i'))
@@ -85,6 +88,7 @@ export default function App() {
 
   const goHub = () => navigate(`${APP_BASE}/`, { kind: 'hub' })
   const goOmok = () => navigate(`${APP_BASE}/omok`, { kind: 'omok' })
+  const goYut = () => navigate(`${APP_BASE}/yut/`, { kind: 'yut' })
   const goSecretCard = () => navigate(`${APP_BASE}/secret-card`, { kind: 'secret-card' })
   const enterOmok = (roomCode: string) => navigate(`${APP_BASE}/room/${roomCode}`, { kind: 'omok-room', roomCode, invalid: false })
   const enterSecretCard = (roomCode: string) => navigate(`${APP_BASE}/secret-card/room/${roomCode}`, { kind: 'secret-card-room', roomCode, invalid: false })
@@ -94,7 +98,8 @@ export default function App() {
   }, [])
 
   if (roomMissing) return <EmptyRoom onHome={roomRoute?.kind === 'secret-card-room' ? goSecretCard : goOmok} />
-  if (route.kind === 'hub') return <MinigameHub onOmok={goOmok} onSecretCard={goSecretCard} />
+  if (route.kind === 'hub') return <MinigameHub onOmok={goOmok} onSecretCard={goSecretCard} onYut={goYut} />
+  if (route.kind === 'yut') return <YutApp />
   if (route.kind === 'omok') return <Lobby onEnter={enterOmok} />
   if (route.kind === 'secret-card') return <SecretCardLobby onEnter={enterSecretCard} onBack={goHub} />
   if (!roomRoute?.roomCode) return <EmptyRoom onHome={roomRoute?.kind === 'secret-card-room' ? goSecretCard : goOmok} />

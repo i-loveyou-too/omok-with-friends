@@ -13,6 +13,7 @@ from .protocol import JoinMessage, MoveMessage, ReactionMessage, SecretCardActio
 from .rooms import room_manager
 from .secret_card import SecretCardState
 from .secret_rooms import secret_card_room_manager
+from .yut import yut_room_manager
 
 
 async def broadcast_secret_state(room: SecretCardState) -> None:
@@ -56,6 +57,7 @@ async def lifespan(_: FastAPI):
                 cleanup_ticks = 0
                 room_manager.cleanup()
                 secret_card_room_manager.cleanup()
+                yut_room_manager.cleanup()
 
     cleanup_task = asyncio.create_task(maintain_rooms())
     try:
@@ -77,7 +79,12 @@ async def game_error_handler(_: Request, exc: GameError) -> JSONResponse:
 
 @app.get("/omokwithfriend/api/health")
 async def health() -> dict:
-    return {"ok": True, "rooms": len(room_manager.rooms), "secretCardRooms": len(secret_card_room_manager.rooms)}
+    return {
+        "ok": True,
+        "rooms": len(room_manager.rooms),
+        "secretCardRooms": len(secret_card_room_manager.rooms),
+        "yutRooms": len(yut_room_manager.rooms),
+    }
 
 
 @app.post("/omokwithfriend/api/rooms", status_code=201)
@@ -102,6 +109,18 @@ async def create_secret_card_room() -> dict:
 async def secret_card_room_status(room_code: str) -> dict:
     room = secret_card_room_manager.get(room_code)
     return {"roomCode": room.room_code, "gameType": "secret_card", "available": len(room.players) < 2}
+
+
+@app.post("/omokwithfriend/api/yut/rooms", status_code=201)
+async def create_yut_room(mode: str = "lucky") -> dict:
+    room = await yut_room_manager.create(mode)
+    return {"roomCode": room.room_code, "gameType": "yut", "mode": room.mode}
+
+
+@app.get("/omokwithfriend/api/yut/rooms/{room_code}")
+async def yut_room_status(room_code: str) -> dict:
+    room = yut_room_manager.get(room_code)
+    return {"roomCode": room.room_code, "gameType": "yut", "mode": room.mode, "available": len(room.players) < 2}
 
 
 @app.websocket("/omokwithfriend/ws/rooms/{room_code}")
@@ -168,6 +187,7 @@ async def room_socket(websocket: WebSocket, room_code: str) -> None:
                         await room_manager.connections.send(websocket, {"type": "pong"})
                         continue
                 await room_manager.connections.broadcast(room.room_code, {"type": "game_state", "state": room.snapshot()})
+
             except (GameError, ValidationError) as exc:
                 code, detail = (exc.code, exc.message) if isinstance(exc, GameError) else ("invalid_message", "메시지 형식이 올바르지 않아요.")
                 await room_manager.connections.send(websocket, {"type": "error", "code": code, "message": detail})
@@ -184,6 +204,85 @@ async def room_socket(websocket: WebSocket, room_code: str) -> None:
                 room.disconnect(token)
                 await room_manager.connections.broadcast(room.room_code, {"type": "presence", "playerId": room.players[token].public_id, "status": "disconnected"})
                 await room_manager.connections.broadcast(room.room_code, {"type": "game_state", "state": room.snapshot()})
+
+
+@app.websocket("/omokwithfriend/ws/yut/rooms/{room_code}")
+async def yut_room_socket(websocket: WebSocket, room_code: str) -> None:
+    await websocket.accept()
+    token = None
+    room = None
+    try:
+        room = yut_room_manager.get(room_code)
+        first = await websocket.receive_json()
+        if not isinstance(first, dict) or first.get("type") != "join":
+            raise GameError("join_required", "먼저 윷놀이 방에 입장해 주세요.")
+        nickname = str(first.get("nickname", "")).strip()[:12]
+        character = str(first.get("character", ""))
+        if not nickname:
+            raise GameError("invalid_nickname", "닉네임을 입력해 주세요.")
+        player = room.join(nickname, character, first.get("token"))
+        token = player.token
+        reconnected = bool(first.get("token") and first.get("token") == token)
+        await yut_room_manager.connections.connect(room.room_code, token, websocket)
+        await yut_room_manager.connections.send(
+            websocket,
+            {"type": "joined", "token": token, "playerId": player.public_id, "reconnected": reconnected},
+        )
+        await yut_room_manager.connections.broadcast(room.room_code, {"type": "game_state", "state": room.snapshot()})
+
+        while True:
+            raw = await websocket.receive_json()
+            try:
+                if not isinstance(raw, dict):
+                    raise GameError("invalid_message", "요청을 다시 확인해 주세요.")
+                kind = raw.get("type")
+                if kind == "roll":
+                    room.roll(token)
+                elif kind == "move":
+                    room.move(token, int(raw["pieceId"]), int(raw["rollId"]))
+                elif kind == "confirm_capture":
+                    room.confirm_capture(token)
+                elif kind == "card_choice":
+                    room.card_choice(
+                        token,
+                        str(raw.get("choice", "")),
+                        int(raw["pieceId"]) if raw.get("pieceId") is not None else None,
+                        int(raw["targetPieceId"]) if raw.get("targetPieceId") is not None else None,
+                    )
+                elif kind == "use_card":
+                    room.use_kept_card(
+                        token,
+                        str(raw.get("instanceId", "")),
+                        int(raw["pieceId"]) if raw.get("pieceId") is not None else None,
+                        int(raw["targetPieceId"]) if raw.get("targetPieceId") is not None else None,
+                    )
+                elif kind == "rematch_request":
+                    room.request_rematch(token)
+                elif kind == "ping":
+                    await yut_room_manager.connections.send(websocket, {"type": "pong"})
+                    continue
+                elif kind == "leave":
+                    room.disconnect(token)
+                    await websocket.close(code=1000)
+                    return
+                else:
+                    raise GameError("invalid_message", "알 수 없는 윷놀이 요청이에요.")
+                await yut_room_manager.connections.broadcast(room.room_code, {"type": "game_state", "state": room.snapshot()})
+            except (GameError, KeyError, TypeError, ValueError) as exc:
+                code, detail = (exc.code, exc.message) if isinstance(exc, GameError) else ("invalid_message", "요청을 다시 확인해 주세요.")
+                await yut_room_manager.connections.send(websocket, {"type": "error", "code": code, "message": detail})
+    except WebSocketDisconnect:
+        pass
+    except (GameError, TypeError, ValueError) as exc:
+        code, detail = (exc.code, exc.message) if isinstance(exc, GameError) else ("invalid_message", "입장 정보를 다시 확인해 주세요.")
+        await websocket.send_json({"type": "error", "code": code, "message": detail})
+        await websocket.close(code=4000)
+    finally:
+        if token and room:
+            current = yut_room_manager.connections.disconnect(room.room_code, token, websocket)
+            if current:
+                room.disconnect(token)
+                await yut_room_manager.connections.broadcast(room.room_code, {"type": "game_state", "state": room.snapshot()})
 
 
 @app.websocket("/omokwithfriend/ws/secret-card/rooms/{room_code}")
