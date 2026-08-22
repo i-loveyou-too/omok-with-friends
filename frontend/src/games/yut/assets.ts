@@ -25,6 +25,7 @@ export const yutAssets = {
     titleSign: asset('ui/title-sign.png'),
     yutBag: asset('ui/lobby-yut-bag.png'),
     start: asset('ui/badges/start.png'),
+    startFinish: asset('ui/badges/start-finish.png'),
     center: asset('ui/badges/center.png'),
     capture: asset('ui/badges/capture.png'),
     stack: asset('ui/badges/stack.png'),

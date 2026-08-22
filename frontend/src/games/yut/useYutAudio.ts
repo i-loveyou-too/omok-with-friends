@@ -40,13 +40,15 @@ export function useYutAudio(state: YutState | null, selfId: string | null) {
     return () => {
       active = false
       bgm.current?.pause()
+      bgm.current?.remove()
+      bgm.current = null
       sounds.current.forEach((audio) => audio.pause())
     }
   }, [])
 
   const sourceUrl = useCallback((source: string | null | undefined) => {
     if (!source || !manifest.current) return null
-    return `${AUDIO_BASE}${source.split('/').pop()}`
+    return new URL(source, new URL(AUDIO_BASE, window.location.origin)).toString()
   }, [])
 
   const startBgm = useCallback(() => {
@@ -55,8 +57,11 @@ export function useYutAudio(state: YutState | null, selfId: string | null) {
     if (!url) return
     if (!bgm.current) {
       bgm.current = new Audio(url)
+      bgm.current.dataset.yutBgm = 'true'
+      bgm.current.hidden = true
       bgm.current.loop = true
       bgm.current.volume = isMobile() ? 0.12 : 0.22
+      document.body.append(bgm.current)
     }
     void bgm.current.play().catch(() => undefined)
   }, [sourceUrl])

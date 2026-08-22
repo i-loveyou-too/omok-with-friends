@@ -115,6 +115,15 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
   const jackpot = new Set(state.lucky.jackpot)
   const danger = new Set(state.lucky.danger)
   const groups = groupedPieces(state.pieces, locations)
+  const ownersByLocation = new Map<string, Set<string>>()
+  groups.forEach(({ location, pieces }) => {
+    const owners = ownersByLocation.get(location) ?? new Set<string>()
+    owners.add(pieces[0].ownerId)
+    ownersByLocation.set(location, owners)
+  })
+  const contestedLocations = new Set(
+    [...ownersByLocation.entries()].filter(([, owners]) => owners.size > 1).map(([location]) => location),
+  )
   const selfPlayer = state.players.find((player) => player.id === selfId)
   const opponent = state.players.find((player) => player.id !== selfId)
   const selfHome = state.pieces.filter((piece) => piece.ownerId === selfId && piece.location === 'S' && !piece.finished)
@@ -140,10 +149,6 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
           const label = kind === 'jackpot' ? '대박칸' : kind === 'danger' ? '위험칸' : kind === 'lucky' ? '행운칸' : '일반칸'
           return <img key={key} className={`yut-node ${kind}`} src={yutTileAsset(kind)} alt={label} style={{ left: `${x}%`, top: `${y}%` }} draggable={false} />
         })}
-        <div className="yut-goal" aria-label={`도착한 말 ${finishedCount}개`}>
-          <img src={yutAssets.ui.finish} alt="도착" />
-          <b>{finishedCount}</b>
-        </div>
         {groups.map(({ key, location, pieces }) => {
           const first = pieces[0]
           const [x, y] = BOARD_POSITIONS[location]
@@ -153,7 +158,7 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
           return (
             <button
               key={key}
-              className={`yut-piece ${mine ? 'mine' : 'theirs'} ${first.shielded ? 'shielded' : ''} ${canSelect ? 'can-select' : ''} ${selectedPieceIds.includes(first.id) && mine ? 'is-selected' : ''} ${hoppingKeys.has(pieceKey(first)) ? 'is-hopping' : ''}`}
+              className={`yut-piece ${mine ? 'mine' : 'theirs'} ${contestedLocations.has(location) ? 'is-contested' : ''} ${x >= 90 ? 'is-right-edge' : ''} ${y >= 90 ? 'is-bottom-edge' : ''} ${first.shielded ? 'shielded' : ''} ${canSelect ? 'can-select' : ''} ${selectedPieceIds.includes(first.id) && mine ? 'is-selected' : ''} ${hoppingKeys.has(pieceKey(first)) ? 'is-hopping' : ''}`}
               style={{ left: `${x}%`, top: `${y}%` }}
               disabled={!canSelect}
               onClick={() => onSelect(first)}
@@ -169,13 +174,27 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
           const owner = state.players.find((player) => player.id === ghost.piece.ownerId)
           return <span key={ghost.key} className={`yut-piece yut-piece-ghost is-${ghost.kind}`} style={{ left: `${x}%`, top: `${y}%` }}>{owner && <CharacterAvatar character={owner.character} />}</span>
         })}
+      </div>
+      <div className="yut-board-docks">
         <div className="yut-home yut-home--me">
-          <img className="yut-start-art" src={yutAssets.ui.start} alt="출발" />
-          {selfHome.map((homePiece) => <button key={homePiece.id} aria-label={`내 말 ${homePiece.id + 1}`} disabled={!selectable(homePiece)} onClick={() => onSelect(homePiece)}>{selfPlayer && <CharacterAvatar character={selfPlayer.character} />}</button>)}
+          <div
+            className="yut-start-finish-badge"
+            aria-label={`출발·도착 지점, 도착한 말 ${finishedCount}개`}
+          >
+            <img src={yutAssets.ui.startFinish} alt="출발·도착" />
+            {finishedCount > 0 && (
+              <b className="yut-start-finish-count">{finishedCount}</b>
+            )}
+          </div>
+          <div className="yut-home-pieces">
+            {selfHome.map((homePiece) => <button key={homePiece.id} aria-label={`내 말 ${homePiece.id + 1}`} disabled={!selectable(homePiece)} onClick={() => onSelect(homePiece)}>{selfPlayer && <CharacterAvatar character={selfPlayer.character} />}</button>)}
+          </div>
         </div>
         <div className="yut-home yut-home--them">
-          <b>상대 출발</b>
-          {opponentHome.map((homePiece) => <span key={homePiece.id}>{opponent && <CharacterAvatar character={opponent.character} />}</span>)}
+          <b>상대<br />출발</b>
+          <div className="yut-home-pieces">
+            {opponentHome.map((homePiece) => <span key={homePiece.id}>{opponent && <CharacterAvatar character={opponent.character} />}</span>)}
+          </div>
         </div>
       </div>
     </div>

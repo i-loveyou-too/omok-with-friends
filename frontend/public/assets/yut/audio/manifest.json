@@ -1,7 +1,7 @@
 {
   "version": 1,
   "basePath": "assets/yut/audio/",
-  "bgm": "bgm.ogg",
+  "bgm": "../../../audio/chiikawa-exercise-bgm.mp3",
   "sfx": {
     "throw": "yut-throw.ogg",
     "landing": "yut-land.ogg",

@@ -159,6 +159,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
   const [copied, setCopied] = useState(false)
   const [selectedRollId, setSelectedRollId] = useState<number | null>(null)
   const [cardTarget, setCardTarget] = useState<CardTargetMode | null>(null)
+  const boardColumnRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!state || state.mustRoll) {
@@ -172,6 +173,28 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
   useEffect(() => {
     if (!state?.pendingCard && cardTarget?.source === 'drawn') setCardTarget(null)
   }, [cardTarget?.source, state?.pendingCard])
+
+  const shouldFocusBoard = Boolean(cardTarget) || Boolean(
+    state
+    && state.status === 'playing'
+    && state.turnPlayerId === selfId
+    && !state.mustRoll
+    && !state.pendingCapture
+    && !state.pendingCard
+    && selectedRollId !== null
+    && !presenting,
+  )
+
+  useEffect(() => {
+    if (!shouldFocusBoard || !window.matchMedia('(max-width: 760px)').matches) return
+    const frame = window.requestAnimationFrame(() => {
+      boardColumnRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [cardTarget, selectedRollId, shouldFocusBoard])
 
   if (!state) return <main className="yut-page yut-loading"><img className="yut-loading-stick" src={yutAssets.results.yut} alt="윷" /><h1>윷판 펴는 중…</h1>{error && <div className="toast">{error}</div>}</main>
 
@@ -248,7 +271,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
       <div className={`yut-player-card ${state.turnPlayerId === opponent?.id ? 'active' : ''}`}>{opponent ? <><CharacterAvatar character={opponent.character} active={state.turnPlayerId === opponent.id} /><div><b>{opponent.nickname}</b><small>완주 {state.pieces.filter((piece) => piece.ownerId === opponent.id && piece.finished).length}/4</small></div></> : <b>친구 기다리는 중…</b>}</div>
     </section>
     <section className="yut-main-grid">
-      <div className="yut-board-column">
+      <div ref={boardColumnRef} className="yut-board-column">
         {state.pendingCapture && state.pendingCapture.ownerId !== selfId && <div className="yut-selection-guide">상대가 잡기를 확인하는 중…</div>}
         {state.pendingCard && state.pendingCard.ownerId !== selfId && <div className="yut-selection-guide">상대가 운빨카드를 고르는 중…</div>}
         {cardGuide && <div className="yut-selection-guide">{cardGuide}</div>}
