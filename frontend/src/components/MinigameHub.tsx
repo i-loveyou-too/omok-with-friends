@@ -2,11 +2,12 @@ interface Props {
   onOmok: () => void
   onSecretCard: () => void
   onYut: () => void
+  onFindMatch: () => void
 }
 
 const base = import.meta.env.BASE_URL
 
-export function MinigameHub({ onOmok, onSecretCard, onYut }: Props) {
+export function MinigameHub({ onOmok, onSecretCard, onYut, onFindMatch }: Props) {
   return (
     <main className="minigame-hub page-shell">
       <div className="minigame-hub__wash" aria-hidden="true" />
@@ -26,6 +27,10 @@ export function MinigameHub({ onOmok, onSecretCard, onYut }: Props) {
         <button className="minigame-select-card minigame-select-card--yut" type="button" onClick={onYut}>
           <img src={`${base}assets/yut/ui/lobby-yut-bag.png`} alt="" />
           <div><small>운도 실력이다!</small><h2>운빨윷놀이</h2><span>시작하기 ›</span></div>
+        </button>
+        <button className="minigame-select-card minigame-select-card--find" type="button" onClick={onFindMatch}>
+          <img src={`${base}assets/find-match/characters/hachiware_03.png`} alt="" />
+          <div><small>딱 하나만 똑같아!</small><h2>눈 크게 떠!</h2><span>시작하기 ›</span></div>
         </button>
       </section>
       <p className="minigame-hub__footer">✦ 둘이서 놀기 좋은 게임을 하나씩 모으는 중 ✦</p>

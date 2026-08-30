@@ -29,8 +29,9 @@
   .secret-round-strip{grid-template-columns:repeat(4,1fr)}
 }
 
-.minigame-hub__grid{width:min(1120px,100%);grid-template-columns:repeat(3,minmax(0,1fr))}
+.minigame-hub__grid{width:min(1120px,100%);grid-template-columns:repeat(2,minmax(0,1fr))}
 .minigame-select-card--yut{background:linear-gradient(145deg,#f8e7a7,#b9dfa8);color:#42552f}
+.minigame-select-card--find{background:linear-gradient(145deg,#ffe0e4,#fff2bd);color:#5b3c35}
 .minigame-select-card h2{font-size:clamp(24px,3vw,34px)}
 @media(max-width:760px){.minigame-hub__grid{grid-template-columns:1fr}}
 

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from .find_match_rooms import find_match_room_manager
 from .game import GameError
 from .protocol import JoinMessage, MoveMessage, ReactionMessage, SecretCardActionMessage, SecretCardSimpleMessage, SimpleMessage, UndoResponseMessage, client_message_adapter, secret_card_message_adapter
 from .rooms import room_manager
@@ -53,11 +54,18 @@ async def lifespan(_: FastAPI):
                     await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "reconnect_timeout", **reconnect_event})
                 if transition_event:
                     await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "auto_advanced", **transition_event})
+            for room in list(find_match_room_manager.rooms.values()):
+                if room.advance():
+                    await find_match_room_manager.connections.broadcast(
+                        room.room_code,
+                        {"type": "game_state", "state": room.snapshot()},
+                    )
             if cleanup_ticks >= 240:
                 cleanup_ticks = 0
                 room_manager.cleanup()
                 secret_card_room_manager.cleanup()
                 yut_room_manager.cleanup()
+                find_match_room_manager.cleanup()
 
     cleanup_task = asyncio.create_task(maintain_rooms())
     try:
@@ -84,6 +92,7 @@ async def health() -> dict:
         "rooms": len(room_manager.rooms),
         "secretCardRooms": len(secret_card_room_manager.rooms),
         "yutRooms": len(yut_room_manager.rooms),
+        "findMatchRooms": len(find_match_room_manager.rooms),
     }
 
 
@@ -109,6 +118,29 @@ async def create_secret_card_room() -> dict:
 async def secret_card_room_status(room_code: str) -> dict:
     room = secret_card_room_manager.get(room_code)
     return {"roomCode": room.room_code, "gameType": "secret_card", "available": len(room.players) < 2}
+
+
+@app.post("/omokwithfriend/api/find-match/rooms", status_code=201)
+async def create_find_match_room(difficulty: str = "medium", win_target: int = 10) -> dict:
+    room = await find_match_room_manager.create(difficulty, win_target)
+    return {
+        "roomCode": room.room_code,
+        "gameType": "find_match",
+        "difficulty": room.difficulty,
+        "winTarget": room.win_target,
+    }
+
+
+@app.get("/omokwithfriend/api/find-match/rooms/{room_code}")
+async def find_match_room_status(room_code: str) -> dict:
+    room = find_match_room_manager.get(room_code)
+    return {
+        "roomCode": room.room_code,
+        "gameType": "find_match",
+        "difficulty": room.difficulty,
+        "winTarget": room.win_target,
+        "available": len(room.players) < 2,
+    }
 
 
 @app.post("/omokwithfriend/api/yut/rooms", status_code=201)
@@ -283,6 +315,106 @@ async def yut_room_socket(websocket: WebSocket, room_code: str) -> None:
             if current:
                 room.disconnect(token)
                 await yut_room_manager.connections.broadcast(room.room_code, {"type": "game_state", "state": room.snapshot()})
+
+
+@app.websocket("/omokwithfriend/ws/find-match/rooms/{room_code}")
+async def find_match_room_socket(websocket: WebSocket, room_code: str) -> None:
+    await websocket.accept()
+    token = None
+    room = None
+    try:
+        room = find_match_room_manager.get(room_code)
+        first = await websocket.receive_json()
+        if not isinstance(first, dict) or first.get("type") != "join":
+            raise GameError("join_required", "먼저 눈 크게 떠! 방에 입장해 주세요.")
+        nickname = first.get("nickname")
+        character = first.get("character")
+        join_token = first.get("token")
+        if not isinstance(nickname, str) or not isinstance(character, str):
+            raise GameError("invalid_join", "입장 정보를 다시 확인해 주세요.")
+        if join_token is not None and not isinstance(join_token, str):
+            raise GameError("invalid_join", "입장 정보를 다시 확인해 주세요.")
+        player = room.join(nickname, character, join_token)
+        token = player.token
+        reconnected = bool(join_token and join_token == token)
+        await find_match_room_manager.connections.connect(room.room_code, token, websocket)
+        await find_match_room_manager.connections.send(
+            websocket,
+            {"type": "joined", "token": token, "playerId": player.public_id, "reconnected": reconnected},
+        )
+        await find_match_room_manager.connections.broadcast(
+            room.room_code,
+            {"type": "game_state", "state": room.snapshot()},
+        )
+        if reconnected:
+            await find_match_room_manager.connections.broadcast(
+                room.room_code,
+                {"type": "presence", "playerId": player.public_id, "status": "reconnected"},
+            )
+
+        while True:
+            raw = await websocket.receive_json()
+            try:
+                if not isinstance(raw, dict):
+                    raise GameError("invalid_message", "요청을 다시 확인해 주세요.")
+                kind = raw.get("type")
+                if kind == "join":
+                    raise GameError("already_joined", "이미 입장했어요.")
+                if kind == "round_ready":
+                    room.ready_round(token, str(raw.get("roundId", "")))
+                elif kind == "guess":
+                    event = room.guess(
+                        token,
+                        str(raw.get("symbolId", "")),
+                        str(raw.get("roundId", "")),
+                    )
+                    await find_match_room_manager.connections.broadcast(
+                        room.room_code,
+                        {"type": "guess_result", **event},
+                    )
+                elif kind == "difficulty_request":
+                    room.request_difficulty(token, str(raw.get("difficulty", "")))
+                elif kind == "difficulty_response":
+                    room.respond_difficulty(token, bool(raw.get("accept")))
+                elif kind == "rematch_request":
+                    room.request_rematch(token)
+                elif kind == "ping":
+                    await find_match_room_manager.connections.send(websocket, {"type": "pong"})
+                    continue
+                elif kind == "leave":
+                    await websocket.close(code=1000)
+                    return
+                else:
+                    raise GameError("invalid_message", "알 수 없는 눈 크게 떠! 요청이에요.")
+                await find_match_room_manager.connections.broadcast(
+                    room.room_code,
+                    {"type": "game_state", "state": room.snapshot()},
+                )
+            except (GameError, KeyError, TypeError, ValueError) as exc:
+                code, detail = (exc.code, exc.message) if isinstance(exc, GameError) else ("invalid_message", "요청을 다시 확인해 주세요.")
+                await find_match_room_manager.connections.send(
+                    websocket,
+                    {"type": "error", "code": code, "message": detail},
+                )
+    except WebSocketDisconnect:
+        pass
+    except (GameError, TypeError, ValueError) as exc:
+        code, detail = (exc.code, exc.message) if isinstance(exc, GameError) else ("invalid_message", "입장 정보를 다시 확인해 주세요.")
+        await websocket.send_json({"type": "error", "code": code, "message": detail})
+        await websocket.close(code=4000)
+    finally:
+        if token and room:
+            current = find_match_room_manager.connections.disconnect(room.room_code, token, websocket)
+            if current:
+                room.disconnect(token)
+                await find_match_room_manager.connections.broadcast(
+                    room.room_code,
+                    {"type": "presence", "playerId": room.players[token].public_id, "status": "disconnected"},
+                )
+                await find_match_room_manager.connections.broadcast(
+                    room.room_code,
+                    {"type": "game_state", "state": room.snapshot()},
+                )
 
 
 @app.websocket("/omokwithfriend/ws/secret-card/rooms/{room_code}")
