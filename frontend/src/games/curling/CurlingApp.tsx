@@ -3,7 +3,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { characterAssets } from '../../assets/characters/manifest'
 import { CharacterAvatar } from '../../components/CharacterAvatar'
 import type { CharacterId } from '../../types'
-import { curlingConceptAsset } from './assets'
+import { curlingConceptAsset, curlingLogoAsset } from './assets'
 import { CurlingBoard } from './CurlingBoard'
 import { useCurlingAudio } from './useCurlingAudio'
 import { useCurlingSocket } from './useCurlingSocket'
@@ -165,9 +165,7 @@ function CurlingLobby({ onEnter }: { onEnter: (code: string) => void }) {
       <section className="curling-panel curling-lobby__card">
         <p className="curling-eyebrow">먼작귀게임방</p>
         <div className="curling-logo" aria-label="쓩! 치이컬링">
-          <span>쓩!</span>
-          <strong>치이컬링</strong>
-          <i>🥌</i>
+          <img src={curlingLogoAsset} alt="" />
         </div>
         <p className="curling-lobby__copy">밀고! 막고! 쳐내고!<br />빙판 위에서 한 판 붙자~</p>
 
@@ -396,7 +394,9 @@ function CurlingGame({
   return (
     <main className="curling-page curling-game">
       <header className="curling-game__header">
-        <div className="curling-brand" aria-label="쓩 치이컬링">쓩! 치이컬링</div>
+        <div className="curling-brand" aria-label="쓩! 치이컬링">
+          <img src={curlingLogoAsset} alt="" />
+        </div>
         <div className="curling-room-actions">
           <button type="button" onClick={() => setShowRules(true)}>룰</button>
           <button type="button" onClick={copy}>ROOM {roomCode}</button>
