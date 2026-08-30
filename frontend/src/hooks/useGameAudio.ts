@@ -10,11 +10,19 @@ export type GameEffect =
   | 'findMatchCombo2'
   | 'findMatchCombo3'
   | 'findMatchVictory'
+  | 'balloonPump'
+  | 'balloonPumpDanger'
+  | 'balloonPumpCritical'
+  | 'balloonBank'
+  | 'balloonTurnChange'
+  | 'balloonCountdown'
+  | 'balloonBurst'
+  | 'balloonWin'
 
 interface GameAudioOptions {
-  bgm?: 'game' | 'chiikawa'
+  bgm?: 'game' | 'chiikawa' | false
   bgmVolume?: number
-  effectSet?: 'common' | 'findMatch'
+  effectSet?: 'common' | 'findMatch' | 'balloon'
 }
 
 const MUTE_STORAGE_KEY = 'omok-sound-muted'
@@ -29,10 +37,19 @@ const EFFECTS: Record<GameEffect, { src: string; volume: number }> = {
   findMatchCombo2: { src: `${AUDIO_BASE}find-match/combo-2.wav`, volume: 0.48 },
   findMatchCombo3: { src: `${AUDIO_BASE}find-match/combo-3.wav`, volume: 0.52 },
   findMatchVictory: { src: `${AUDIO_BASE}find-match/victory.wav`, volume: 0.58 },
+  balloonPump: { src: `${AUDIO_BASE}chat-pop.wav`, volume: 0.28 },
+  balloonPumpDanger: { src: `${AUDIO_BASE}stone-place.wav`, volume: 0.3 },
+  balloonPumpCritical: { src: `${AUDIO_BASE}curling/tick.wav`, volume: 0.32 },
+  balloonBank: { src: `${AUDIO_BASE}find-match/score.wav`, volume: 0.46 },
+  balloonTurnChange: { src: `${AUDIO_BASE}find-match/round-reveal.wav`, volume: 0.26 },
+  balloonCountdown: { src: `${AUDIO_BASE}curling/tick.wav`, volume: 0.3 },
+  balloonBurst: { src: `${AUDIO_BASE}curling/takeout.wav`, volume: 0.7 },
+  balloonWin: { src: `${AUDIO_BASE}find-match/victory.wav`, volume: 0.6 },
 }
 const EFFECT_SETS: Record<NonNullable<GameAudioOptions['effectSet']>, GameEffect[]> = {
   common: ['chatBubble', 'stonePlace', 'undoRequest'],
   findMatch: ['findMatchReveal', 'findMatchWrong', 'findMatchScore', 'findMatchCombo2', 'findMatchCombo3', 'findMatchVictory'],
+  balloon: ['balloonPump', 'balloonPumpDanger', 'balloonPumpCritical', 'balloonBank', 'balloonTurnChange', 'balloonCountdown', 'balloonBurst', 'balloonWin'],
 }
 
 function savedMutePreference() {
@@ -79,22 +96,27 @@ export function useGameAudio({ bgm = 'game', bgmVolume = 0.2, effectSet = 'commo
       }))
     })
     void Promise.all(attempts).then((results) => {
-      if (results.some((succeeded) => !succeeded)) effectsPrimedRef.current = false
+      const failed = results.some((succeeded) => !succeeded)
+      if (failed) effectsPrimedRef.current = false
+      if (effectSet === 'balloon') setNeedsGesture(failed)
     })
-  }, [])
+  }, [effectSet])
 
   useEffect(() => {
-    const bgmFile = bgm === 'chiikawa' ? 'chiikawa-exercise-bgm.mp3' : 'game-bgm.mp3'
-    const bgmAudio = new Audio(`${AUDIO_BASE}${bgmFile}`)
-    bgmAudio.dataset.gameBgm = bgm
-    bgmAudio.hidden = true
-    bgmAudio.loop = true
-    bgmAudio.preload = 'metadata'
-    bgmAudio.volume = bgmVolume
-    if (effectSet === 'findMatch') document.body.appendChild(bgmAudio)
-    bgmRef.current = bgmAudio
+    let bgmAudio: HTMLAudioElement | null = null
+    if (bgm) {
+      const bgmFile = bgm === 'chiikawa' ? 'chiikawa-exercise-bgm.mp3' : 'game-bgm.mp3'
+      bgmAudio = new Audio(`${AUDIO_BASE}${bgmFile}`)
+      bgmAudio.dataset.gameBgm = bgm
+      bgmAudio.hidden = true
+      bgmAudio.loop = true
+      bgmAudio.preload = 'metadata'
+      bgmAudio.volume = bgmVolume
+      if (effectSet === 'findMatch') document.body.appendChild(bgmAudio)
+      bgmRef.current = bgmAudio
+    }
 
-    if (effectSet === 'findMatch') {
+    if (effectSet !== 'common') {
       EFFECT_SETS[effectSet].forEach((effect) => {
         const config = EFFECTS[effect]
         const audio = new Audio(config.src)
@@ -119,10 +141,10 @@ export function useGameAudio({ bgm = 'game', bgmVolume = 0.2, effectSet = 'commo
     return () => {
       window.removeEventListener('pointerdown', unlock)
       window.removeEventListener('keydown', unlock)
-      bgmAudio.pause()
-      bgmAudio.removeAttribute('src')
-      bgmAudio.load()
-      bgmAudio.remove()
+      bgmAudio?.pause()
+      bgmAudio?.removeAttribute('src')
+      bgmAudio?.load()
+      bgmAudio?.remove()
       bgmRef.current = null
       effectsRef.current.forEach((audio) => {
         audio.pause()
@@ -161,7 +183,9 @@ export function useGameAudio({ bgm = 'game', bgmVolume = 0.2, effectSet = 'commo
     if (reusedAudio) {
       reusedAudio.currentTime = 0
       reusedAudio.dataset.playCount = String(Number(reusedAudio.dataset.playCount ?? 0) + 1)
-      void reusedAudio.play().catch(() => undefined)
+      void reusedAudio.play().catch(() => {
+        if (effectSet === 'balloon') setNeedsGesture(true)
+      })
       return
     }
 
@@ -173,7 +197,12 @@ export function useGameAudio({ bgm = 'game', bgmVolume = 0.2, effectSet = 'commo
     audio.addEventListener('ended', release, { once: true })
     audio.addEventListener('error', release, { once: true })
     void audio.play().catch(release)
-  }, [])
+  }, [effectSet])
+
+  const enableAudio = useCallback(() => {
+    primeEffects()
+    void startBgm()
+  }, [primeEffects, startBgm])
 
   const toggleMute = useCallback(() => setMuted((value) => {
     const next = !value
@@ -182,5 +211,5 @@ export function useGameAudio({ bgm = 'game', bgmVolume = 0.2, effectSet = 'commo
     return next
   }), [startBgm])
 
-  return { muted, needsGesture, startBgm, toggleMute, playEffect }
+  return { muted, needsGesture, startBgm, enableAudio, toggleMute, playEffect }
 }

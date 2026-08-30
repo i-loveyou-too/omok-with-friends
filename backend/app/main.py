@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from .balloon_rooms import balloon_room_manager
 from .curling import curling_room_manager
 from .curling_routes import router as curling_router
 from .find_match_rooms import find_match_room_manager
@@ -62,12 +63,21 @@ async def lifespan(_: FastAPI):
                         room.room_code,
                         {"type": "game_state", "state": room.snapshot()},
                     )
+            for room in list(balloon_room_manager.rooms.values()):
+                timeout_event = room.expire_turn()
+                transition_event = room.advance()
+                if timeout_event or transition_event:
+                    await balloon_room_manager.connections.broadcast(
+                        room.room_code,
+                        {"type": "game_state", "state": room.snapshot()},
+                    )
             if cleanup_ticks >= 240:
                 cleanup_ticks = 0
                 room_manager.cleanup()
                 secret_card_room_manager.cleanup()
                 yut_room_manager.cleanup()
                 find_match_room_manager.cleanup()
+                balloon_room_manager.cleanup()
                 curling_room_manager.cleanup()
 
     cleanup_task = asyncio.create_task(maintain_rooms())
@@ -97,6 +107,7 @@ async def health() -> dict:
         "secretCardRooms": len(secret_card_room_manager.rooms),
         "yutRooms": len(yut_room_manager.rooms),
         "findMatchRooms": len(find_match_room_manager.rooms),
+        "balloonRooms": len(balloon_room_manager.rooms),
         "curlingRooms": len(curling_room_manager.rooms),
     }
 
@@ -144,6 +155,23 @@ async def find_match_room_status(room_code: str) -> dict:
         "gameType": "find_match",
         "difficulty": room.difficulty,
         "winTarget": room.win_target,
+        "available": len(room.players) < 2,
+    }
+
+
+@app.post("/omokwithfriend/api/balloon/rooms", status_code=201)
+async def create_balloon_room() -> dict:
+    room = await balloon_room_manager.create()
+    return {"roomCode": room.room_code, "gameType": "balloon", "targetScore": 100}
+
+
+@app.get("/omokwithfriend/api/balloon/rooms/{room_code}")
+async def balloon_room_status(room_code: str) -> dict:
+    room = balloon_room_manager.get(room_code)
+    return {
+        "roomCode": room.room_code,
+        "gameType": "balloon",
+        "targetScore": 100,
         "available": len(room.players) < 2,
     }
 
@@ -489,3 +517,93 @@ async def secret_card_room_socket(websocket: WebSocket, room_code: str) -> None:
                 room.disconnect(token)
                 await secret_card_room_manager.connections.broadcast(room.room_code, {"type": "presence", "playerId": room.players[token].public_id, "status": "disconnected"})
                 await broadcast_secret_state(room)
+
+
+@app.websocket("/omokwithfriend/ws/balloon/rooms/{room_code}")
+async def balloon_room_socket(websocket: WebSocket, room_code: str) -> None:
+    await websocket.accept()
+    token = None
+    room = None
+    try:
+        room = balloon_room_manager.get(room_code)
+        first = await websocket.receive_json()
+        if not isinstance(first, dict) or first.get("type") != "join":
+            raise GameError("join_required", "먼저 터질까 말까! 방에 입장해 주세요.")
+        nickname = first.get("nickname")
+        character = first.get("character")
+        join_token = first.get("token")
+        if not isinstance(nickname, str) or not isinstance(character, str):
+            raise GameError("invalid_join", "입장 정보를 다시 확인해 주세요.")
+        if join_token is not None and not isinstance(join_token, str):
+            raise GameError("invalid_join", "입장 정보를 다시 확인해 주세요.")
+
+        player = room.join(nickname, character, join_token)
+        token = player.token
+        reconnected = bool(join_token and join_token == token)
+        await balloon_room_manager.connections.connect(room.room_code, token, websocket)
+        room.resume_if_possible()
+        await balloon_room_manager.connections.send(
+            websocket,
+            {"type": "joined", "token": token, "playerId": player.public_id, "reconnected": reconnected},
+        )
+        await balloon_room_manager.connections.broadcast(
+            room.room_code,
+            {"type": "game_state", "state": room.snapshot()},
+        )
+        if reconnected:
+            await balloon_room_manager.connections.broadcast(
+                room.room_code,
+                {"type": "presence", "playerId": player.public_id, "status": "reconnected"},
+            )
+
+        while True:
+            raw = await websocket.receive_json()
+            try:
+                if not isinstance(raw, dict):
+                    raise GameError("invalid_message", "요청을 다시 확인해 주세요.")
+                kind = raw.get("type")
+                if kind == "join":
+                    raise GameError("already_joined", "이미 입장했어요.")
+                if kind == "pump":
+                    room.pump(token, str(raw.get("turnId", "")))
+                elif kind == "bank":
+                    room.bank(token, str(raw.get("turnId", "")))
+                elif kind == "rematch_request":
+                    room.request_rematch(token)
+                elif kind == "ping":
+                    await balloon_room_manager.connections.send(websocket, {"type": "pong"})
+                    continue
+                elif kind == "leave":
+                    await websocket.close(code=1000)
+                    return
+                else:
+                    raise GameError("invalid_message", "알 수 없는 터질까 말까! 요청이에요.")
+                await balloon_room_manager.connections.broadcast(
+                    room.room_code,
+                    {"type": "game_state", "state": room.snapshot()},
+                )
+            except (GameError, KeyError, TypeError, ValueError) as exc:
+                code, detail = (exc.code, exc.message) if isinstance(exc, GameError) else ("invalid_message", "요청을 다시 확인해 주세요.")
+                await balloon_room_manager.connections.send(
+                    websocket,
+                    {"type": "error", "code": code, "message": detail},
+                )
+    except WebSocketDisconnect:
+        pass
+    except (GameError, TypeError, ValueError) as exc:
+        code, detail = (exc.code, exc.message) if isinstance(exc, GameError) else ("invalid_message", "입장 정보를 다시 확인해 주세요.")
+        await websocket.send_json({"type": "error", "code": code, "message": detail})
+        await websocket.close(code=4000)
+    finally:
+        if token and room:
+            current = balloon_room_manager.connections.disconnect(room.room_code, token, websocket)
+            if current:
+                room.disconnect(token)
+                await balloon_room_manager.connections.broadcast(
+                    room.room_code,
+                    {"type": "presence", "playerId": room.players[token].public_id, "status": "disconnected"},
+                )
+                await balloon_room_manager.connections.broadcast(
+                    room.room_code,
+                    {"type": "game_state", "state": room.snapshot()},
+                )
