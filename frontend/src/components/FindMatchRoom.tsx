@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Profile, Session } from '../types'
 import { useFindMatchSocket } from '../hooks/useFindMatchSocket'
+import { useGameAudio, type GameEffect } from '../hooks/useGameAudio'
 import {
   DIFFICULTIES,
   findMatchAsset,
@@ -19,16 +20,22 @@ interface Props {
 }
 
 export function FindMatchRoom({ roomCode, profile, onSession, onLeave, onRoomMissing }: Props) {
-  const { state, status, selfId, error, notice, lockedUntil, lastWinnerId, send } = useFindMatchSocket(
+  const { state, status, selfId, error, notice, lockedUntil, lastWinnerId, lastAnswerId, lastGuess, send } = useFindMatchSocket(
     roomCode,
     profile,
     onSession,
     onRoomMissing,
   )
+  const { muted, needsGesture, startBgm, toggleMute, playEffect } = useGameAudio({
+    bgm: 'chiikawa',
+    bgmVolume: 0.16,
+    effectSet: 'findMatch',
+  })
   const [now, setNow] = useState(Date.now())
   const [copied, setCopied] = useState(false)
   const preparedRound = useRef('')
   const preparingRound = useRef('')
+  const audioMountedAt = useRef(Date.now())
 
   const round = state?.round
   useEffect(() => {
@@ -73,6 +80,33 @@ export function FindMatchRoom({ roomCode, profile, onSession, onLeave, onRoomMis
   const countdown = round?.revealedAt ? Math.max(0, Math.ceil((round.revealedAt - now) / 1000)) : 0
   const difficultyChangeAllowed = Boolean(round?.resolved && state?.status === 'playing' && !state.pendingDifficulty)
 
+  useEffect(() => {
+    if (!round?.revealedAt || !revealed || round.revealedAt < audioMountedAt.current - 250) return
+    playEffect('findMatchReveal', `find-match:reveal:${round.roundId}`)
+  }, [playEffect, revealed, round?.revealedAt, round?.roundId])
+
+  useEffect(() => {
+    if (!lastGuess || lastGuess.playerId !== selfId) return
+    let effect: GameEffect
+    if (!lastGuess.correct) effect = 'findMatchWrong'
+    else if (lastGuess.finished) effect = 'findMatchVictory'
+    else if (lastGuess.combo >= 3) effect = 'findMatchCombo3'
+    else if (lastGuess.combo === 2) effect = 'findMatchCombo2'
+    else effect = 'findMatchScore'
+    playEffect(effect, `find-match:guess:${lastGuess.eventId}`)
+  }, [lastGuess, playEffect, selfId])
+
+  const audioToggle = (
+    <button type="button" onClick={toggleMute} aria-label={muted ? '소리 켜기' : '소리 끄기'}>
+      {muted ? '🔇 소리 켜기' : '🔊 소리 끄기'}
+    </button>
+  )
+  const audioHint = needsGesture && !muted && (
+    <button className="find-match-audio-hint" type="button" onClick={() => void startBgm()}>
+      🔊 눌러서 소리 켜기
+    </button>
+  )
+
   const leave = () => {
     send({ type: 'leave' })
     onLeave()
@@ -97,9 +131,11 @@ export function FindMatchRoom({ roomCode, profile, onSession, onLeave, onRoomMis
   if (!state || !me) {
     return (
       <main className="find-match-room find-match-room--loading">
+        <div className="find-match-audio-corner">{audioToggle}</div>
         <img src={findMatchAsset('magnifier')} alt="" />
         <b>{error ? '방에 들어가지 못했어요.' : status === 'reconnecting' ? '다시 연결하고 있어요…' : '방에 들어가는 중…'}</b>
         {error && <><small>{error}</small><button type="button" onClick={onLeave}>눈 크게 떠! 메인으로</button></>}
+        {audioHint}
       </main>
     )
   }
@@ -108,6 +144,7 @@ export function FindMatchRoom({ roomCode, profile, onSession, onLeave, onRoomMis
     return (
       <main className={`find-match-room find-match-room--waiting theme-${me.character}`}>
         <button className="find-match-back" type="button" onClick={leave}>← 나가기</button>
+        <div className="find-match-audio-corner">{audioToggle}</div>
         <section>
           <img src={findMatchCharacterSrc(me.character, 2)} alt="" />
           <small>눈 크게 떠! 방 코드</small>
@@ -115,6 +152,7 @@ export function FindMatchRoom({ roomCode, profile, onSession, onLeave, onRoomMis
           <b>친구가 들어오길 기다리고 있어요.</b>
           <button type="button" onClick={copyInvite}>{copied ? '초대 주소를 복사했어요' : '초대 주소 복사'}</button>
         </section>
+        {audioHint}
       </main>
     )
   }
@@ -139,6 +177,7 @@ export function FindMatchRoom({ roomCode, profile, onSession, onLeave, onRoomMis
         <details className="find-match-options">
           <summary>난이도</summary>
           <div>
+            {audioToggle}
             <small>{difficultyChangeAllowed ? '다음 라운드 난이도' : '라운드가 끝나면 변경 가능'}</small>
             {(Object.entries(DIFFICULTIES) as Array<[FindMatchDifficulty, typeof DIFFICULTIES[FindMatchDifficulty]]>).map(([id, difficulty]) => (
               <button key={id} type="button" disabled={!difficultyChangeAllowed || id === state.difficulty} onClick={() => requestDifficulty(id)}>{difficulty.label}</button>
@@ -151,18 +190,22 @@ export function FindMatchRoom({ roomCode, profile, onSession, onLeave, onRoomMis
         <b>{finalRound ? 'FINAL ROUND' : matchPoint ? 'MATCH POINT' : state.combo.count >= 3 ? `${state.combo.count} COMBO` : `먼저 ${state.winTarget}점`}</b>
         <span>ROUND {state.roundNumber}</span>
       </section>
+      <section className={`find-match-guide ${lastAnswerId ? 'is-answer' : ''}`} aria-live="polite">
+        <b>{lastAnswerId ? '정답! ✨' : revealed ? '왼쪽 카드와 같은 그림을 오른쪽에서 찾아 눌러!' : '같은 그림을 찾아봐!'}</b>
+        {lastAnswerId && <span>{lastWinnerId === me.id ? '찾았다! ✨' : '아깝다! 정답은 이거였어'}</span>}
+      </section>
       {round && (
-        <div className={`find-match-board ${!revealed ? 'is-concealed' : ''} ${lockedUntil > Date.now() ? 'is-locked' : ''} ${lastWinnerId ? 'has-result' : ''}`}>
-          <MatchCard side="left" ids={round.left} difficulty={state.difficulty} roundNumber={state.roundNumber} onGuess={guess} disabled={!canGuess} />
-          <MatchCard side="right" ids={round.right} difficulty={state.difficulty} roundNumber={state.roundNumber} onGuess={guess} disabled={!canGuess} />
+        <div className={`find-match-board ${!revealed ? 'is-concealed' : ''} ${lockedUntil > Date.now() ? 'is-locked' : ''} ${lastAnswerId ? 'has-answer' : ''}`}>
+          <MatchCard side="left" ids={round.left} difficulty={state.difficulty} roundNumber={state.roundNumber} onGuess={guess} disabled={!canGuess} answerId={lastAnswerId} />
+          <MatchCard side="right" ids={round.right} difficulty={state.difficulty} roundNumber={state.roundNumber} onGuess={guess} disabled={!canGuess} answerId={lastAnswerId} />
           {!round.revealedAt && <div className="find-match-ready">서로의 카드 준비를 기다리는 중…</div>}
         </div>
       )}
       {countdown > 0 && <div className="find-match-countdown" aria-live="assertive">{countdown}</div>}
       {lockedUntil > Date.now() && <div className="find-match-penalty">다시 한번 살펴봐요</div>}
-      {lastWinnerId && <div className="find-match-flash">{lastWinnerId === me.id ? '찾았다!' : '아깝다!'}</div>}
       {status === 'reconnecting' && <div className="find-match-toast">연결을 복구하고 있어요…</div>}
       {notice && status !== 'reconnecting' && <div className="find-match-toast">{notice}</div>}
+      {audioHint}
       {state.pendingDifficulty && (
         <div className="find-match-modal" role="dialog" aria-modal="true">
           <div>
@@ -172,7 +215,7 @@ export function FindMatchRoom({ roomCode, profile, onSession, onLeave, onRoomMis
           </div>
         </div>
       )}
-      {state.status === 'finished' && winner && (
+      {state.status === 'finished' && winner && !lastAnswerId && (
         <div className="find-match-modal" role="dialog" aria-modal="true">
           <div className="find-match-result">
             <img src={findMatchCharacterSrc(winner.character, winner.id === me.id ? 2 : 4)} alt="" />
@@ -187,39 +230,46 @@ export function FindMatchRoom({ roomCode, profile, onSession, onLeave, onRoomMis
   )
 }
 
-function MatchCard({ side, ids, difficulty, roundNumber, onGuess, disabled }: {
+function MatchCard({ side, ids, difficulty, roundNumber, onGuess, disabled, answerId }: {
   side: 'left' | 'right'
   ids: string[]
   difficulty: FindMatchDifficulty
   roundNumber: number
   onGuess: (id: string) => void
   disabled: boolean
+  answerId: string | null
 }) {
   const slots = useMemo(() => layoutFor(difficulty, side, roundNumber), [difficulty, side, roundNumber])
+  const isReference = side === 'left'
   return (
-    <section className={`find-match-card find-match-card--${side}`} aria-label={`${side === 'left' ? '왼쪽' : '오른쪽'} 그림 카드`}>
-      {ids.map((id, index) => {
-        const slot = slots[index % slots.length]
-        const rotation = (roundNumber * 71 + index * 137 + (side === 'right' ? 53 : 0)) % 360
-        return (
-          <button
-            key={`${id}-${index}`}
-            type="button"
-            data-card-side={side}
-            data-symbol-id={id}
-            aria-label={`${side === 'left' ? '왼쪽' : '오른쪽'} 카드 그림 ${index + 1}`}
-            disabled={disabled}
-            onClick={() => onGuess(id)}
-            style={{
-              left: `${slot.x}%`,
-              top: `${slot.y}%`,
-              transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${slot.scale})`,
-            }}
-          >
-            <img src={symbolSrc(id)} alt="" />
-          </button>
-        )
-      })}
+    <section className={`find-match-card-column find-match-card-column--${side}`} aria-label={`${isReference ? '왼쪽 기준' : '오른쪽 정답'} 카드`}>
+      <b className="find-match-card-label">{isReference ? '👀 기준 카드' : '👉 여기서 찾아!'}</b>
+      <div className={`find-match-card find-match-card--${side}`}>
+        {ids.map((id, index) => {
+          const slot = slots[index % slots.length]
+          const rotation = (roundNumber * 71 + index * 137 + (side === 'right' ? 53 : 0)) % 360
+          const isAnswer = id === answerId
+          return (
+            <button
+              key={`${id}-${index}`}
+              className={isAnswer ? 'is-answer' : undefined}
+              type="button"
+              data-card-side={side}
+              data-symbol-id={id}
+              aria-label={`${isReference ? '왼쪽 기준' : '오른쪽 선택'} 카드 그림 ${index + 1}`}
+              disabled={isReference || disabled}
+              onClick={isReference ? undefined : () => onGuess(id)}
+              style={{
+                left: `${slot.x}%`,
+                top: `${slot.y}%`,
+                transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${slot.scale})`,
+              }}
+            >
+              <img src={symbolSrc(id)} alt="" />
+            </button>
+          )
+        })}
+      </div>
     </section>
   )
 }

@@ -37,6 +37,15 @@ export interface FindMatchState {
   serverNow: number
 }
 
+export interface FindMatchGuessEvent {
+  eventId: string
+  correct: boolean
+  playerId: string
+  symbolId: string | null
+  combo: number
+  finished: boolean
+}
+
 export interface FindMatchConnection {
   state: FindMatchState | null
   status: ConnectionStatus
@@ -45,5 +54,7 @@ export interface FindMatchConnection {
   notice: string | null
   lockedUntil: number
   lastWinnerId: string | null
+  lastAnswerId: string | null
+  lastGuess: FindMatchGuessEvent | null
   send: (payload: object) => boolean
 }

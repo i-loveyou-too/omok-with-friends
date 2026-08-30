@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Profile, Session } from '../types'
-import type { FindMatchConnection, FindMatchState } from '../games/findMatch/types'
+import type { FindMatchConnection, FindMatchGuessEvent, FindMatchState } from '../games/findMatch/types'
 
 const APP_BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 type ServerMessage =
   | { type: 'joined'; token: string; playerId: string; reconnected: boolean }
   | { type: 'game_state'; state: FindMatchState }
-  | { type: 'guess_result'; correct: boolean; playerId: string; lockMs?: number; lockedUntil?: number }
+  | { type: 'guess_result'; correct: boolean; playerId: string; symbolId?: string; lockMs?: number; lockedUntil?: number; combo?: number; finished?: boolean }
   | { type: 'presence'; playerId: string; status: 'disconnected' | 'reconnected' }
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' }
@@ -28,10 +28,12 @@ export function useFindMatchSocket(
   const socketRef = useRef<WebSocket | null>(null)
   const tokenRef = useRef(profile.token)
   const selfIdRef = useRef<string | null>(null)
+  const stateRef = useRef<FindMatchState | null>(null)
   const retryRef = useRef<number | undefined>(undefined)
   const lockTimerRef = useRef<number | undefined>(undefined)
   const noticeTimerRef = useRef<number | undefined>(undefined)
-  const winnerTimerRef = useRef<number | undefined>(undefined)
+  const resultTimerRef = useRef<number | undefined>(undefined)
+  const resultRoundRef = useRef<string | null>(null)
   const onSessionRef = useRef(onSession)
   const onRoomMissingRef = useRef(onRoomMissing)
   const [state, setState] = useState<FindMatchState | null>(null)
@@ -41,6 +43,8 @@ export function useFindMatchSocket(
   const [notice, setNotice] = useState<string | null>(null)
   const [lockedUntil, setLockedUntil] = useState(0)
   const [lastWinnerId, setLastWinnerId] = useState<string | null>(null)
+  const [lastAnswerId, setLastAnswerId] = useState<string | null>(null)
+  const [lastGuess, setLastGuess] = useState<FindMatchGuessEvent | null>(null)
 
   onSessionRef.current = onSession
   onRoomMissingRef.current = onRoomMissing
@@ -56,6 +60,11 @@ export function useFindMatchSocket(
     let attempts = 0
     let pingTimer: number | undefined
     setState(null)
+    stateRef.current = null
+    resultRoundRef.current = null
+    setLastWinnerId(null)
+    setLastAnswerId(null)
+    setLastGuess(null)
     setError(null)
 
     const connect = () => {
@@ -93,18 +102,42 @@ export function useFindMatchSocket(
           })
           if (message.reconnected) showNotice('게임에 다시 연결됐어요.')
         } else if (message.type === 'game_state') {
+          if (resultRoundRef.current && message.state.round?.roundId !== resultRoundRef.current) {
+            resultRoundRef.current = null
+            if (resultTimerRef.current) window.clearTimeout(resultTimerRef.current)
+            setLastWinnerId(null)
+            setLastAnswerId(null)
+          }
+          stateRef.current = message.state
           setState(message.state)
         } else if (message.type === 'guess_result') {
+          const roundId = stateRef.current?.round?.roundId ?? 'unknown-round'
+          const until = message.lockedUntil ?? Date.now() + (message.lockMs ?? 1200)
+          setLastGuess({
+            eventId: message.correct
+              ? `${roundId}:correct:${message.playerId}`
+              : `${roundId}:wrong:${message.playerId}:${until}`,
+            correct: message.correct,
+            playerId: message.playerId,
+            symbolId: message.symbolId ?? null,
+            combo: message.combo ?? 0,
+            finished: message.finished ?? false,
+          })
           if (!message.correct && message.playerId === selfIdRef.current) {
-            const until = message.lockedUntil ?? Date.now() + (message.lockMs ?? 1200)
             setLockedUntil(until)
             if (lockTimerRef.current) window.clearTimeout(lockTimerRef.current)
             lockTimerRef.current = window.setTimeout(() => setLockedUntil(0), Math.max(0, until - Date.now()) + 20)
           }
           if (message.correct) {
+            resultRoundRef.current = roundId
             setLastWinnerId(message.playerId)
-            if (winnerTimerRef.current) window.clearTimeout(winnerTimerRef.current)
-            winnerTimerRef.current = window.setTimeout(() => setLastWinnerId(null), 1400)
+            setLastAnswerId(message.symbolId ?? null)
+            if (resultTimerRef.current) window.clearTimeout(resultTimerRef.current)
+            resultTimerRef.current = window.setTimeout(() => {
+              resultRoundRef.current = null
+              setLastWinnerId(null)
+              setLastAnswerId(null)
+            }, 1625)
           }
         } else if (message.type === 'presence') {
           const subject = message.playerId === selfIdRef.current ? '내 연결이' : '친구 연결이'
@@ -145,7 +178,7 @@ export function useFindMatchSocket(
       if (pingTimer) window.clearInterval(pingTimer)
       if (lockTimerRef.current) window.clearTimeout(lockTimerRef.current)
       if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
-      if (winnerTimerRef.current) window.clearTimeout(winnerTimerRef.current)
+      if (resultTimerRef.current) window.clearTimeout(resultTimerRef.current)
       socketRef.current?.close(1000)
     }
   }, [roomCode, profile.nickname, profile.character, profile.token, showNotice])
@@ -160,5 +193,5 @@ export function useFindMatchSocket(
     return false
   }, [showNotice])
 
-  return { state, status, selfId, error, notice, lockedUntil, lastWinnerId, send }
+  return { state, status, selfId, error, notice, lockedUntil, lastWinnerId, lastAnswerId, lastGuess, send }
 }
