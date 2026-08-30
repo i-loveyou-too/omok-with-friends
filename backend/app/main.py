@@ -8,8 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from .curling import curling_room_manager
-from .curling_routes import router as curling_router
 from .find_match_rooms import find_match_room_manager
 from .game import GameError
 from .protocol import JoinMessage, MoveMessage, ReactionMessage, SecretCardActionMessage, SecretCardSimpleMessage, SimpleMessage, UndoResponseMessage, client_message_adapter, secret_card_message_adapter
@@ -68,7 +66,6 @@ async def lifespan(_: FastAPI):
                 secret_card_room_manager.cleanup()
                 yut_room_manager.cleanup()
                 find_match_room_manager.cleanup()
-                curling_room_manager.cleanup()
 
     cleanup_task = asyncio.create_task(maintain_rooms())
     try:
@@ -81,7 +78,6 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="먼작귀게임방", version="2.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-app.include_router(curling_router)
 
 
 @app.exception_handler(GameError)
@@ -97,7 +93,6 @@ async def health() -> dict:
         "secretCardRooms": len(secret_card_room_manager.rooms),
         "yutRooms": len(yut_room_manager.rooms),
         "findMatchRooms": len(find_match_room_manager.rooms),
-        "curlingRooms": len(curling_room_manager.rooms),
     }
 
 
