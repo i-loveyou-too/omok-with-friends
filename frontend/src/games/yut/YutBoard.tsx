@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CharacterAvatar } from '../../components/CharacterAvatar'
-import { BOARD_POSITIONS, INNER_KEYS, OUTER_KEYS } from './board'
+import { BOARD_PATH_LINES, BOARD_POSITIONS, INNER_KEYS, OUTER_KEYS } from './board'
 import { yutAssets, yutTileAsset, type YutTileKind } from './assets'
 import type { YutPiece, YutState } from './types'
 
@@ -112,9 +112,9 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
     return () => window.clearTimeout(timer)
   }, [state.lastEvent, state.pieces])
 
-  const lucky = new Set(state.lucky.normal)
-  const jackpot = new Set(state.lucky.jackpot)
-  const danger = new Set(state.lucky.danger)
+  const lucky = new Set(state.mode === 'lucky' ? state.lucky.normal : [])
+  const jackpot = new Set(state.mode === 'lucky' ? state.lucky.jackpot : [])
+  const danger = new Set(state.mode === 'lucky' ? state.lucky.danger : [])
   const groups = groupedPieces(state.pieces, locations)
   const ownersByLocation = new Map<string, Set<string>>()
   groups.forEach(({ location, pieces }) => {
@@ -137,8 +137,7 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
     <div className="yut-board-wrap">
       <div className="yut-board" aria-label="윷놀이 말판">
         <svg className="yut-lines" viewBox="0 0 100 100" aria-hidden="true">
-          <path d="M8 92H92V8H8Z" />
-          <path d="M8 50H92M50 8V92M8 8L92 92M92 8L8 92" />
+          {BOARD_PATH_LINES.map((path) => <path key={path} d={path} />)}
         </svg>
         {[...OUTER_KEYS.filter((key) => key !== 'S'), ...INNER_KEYS].map((key) => {
           const [x, y] = BOARD_POSITIONS[key]

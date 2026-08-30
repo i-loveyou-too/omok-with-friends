@@ -334,6 +334,15 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
         <div className="yut-board-stage">
           <YutBoard state={state} selfId={selfId} selectionMode={selectionMode} selectedPieceIds={cardTarget?.ownPieceId === undefined ? [] : [cardTarget.ownPieceId]} selectablePieceKeys={selectablePieceKeys} onSelect={selectPiece} onHop={() => audio.play('landing')} />
 
+          {canRoll && (
+            <div className="yut-board-roll-cta-layer">
+              <button className="yut-board-roll-cta" type="button" aria-label="내 차례야! 윷을 던져줘" onClick={() => send({ type: 'roll' })}>
+                <span>내 차례야! 윷을 던져줘</span>
+                <img src={yutAssets.ui.rollButton} alt="" />
+              </button>
+            </div>
+          )}
+
           {presenting && (
             <div className="yut-board-throw-overlay">
               <div className="yut-throw-stage" aria-label="윷을 던지는 중">

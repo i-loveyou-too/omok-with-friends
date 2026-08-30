@@ -25,8 +25,10 @@ ROLLS = [
 ]
 
 OUTER = ["S", *[f"O{i}" for i in range(1, 21)], "F"]
-SHORT_A = ["S", *[f"O{i}" for i in range(1, 6)], "A1", "A2", "C", "A3", "A4", *[f"O{i}" for i in range(15, 21)], "F"]
-SHORT_B = ["S", *[f"O{i}" for i in range(1, 11)], "B1", "B2", "C", "B3", "B4", "O20", "F"]
+DIAGONAL_A = ["O5", "A1", "A2", "C", "A3", "A4", "O15"]
+DIAGONAL_B = ["O10", "B1", "B2", "C", "B3", "B4", "O20"]
+SHORT_A = ["S", *[f"O{i}" for i in range(1, 5)], *DIAGONAL_A, *[f"O{i}" for i in range(16, 21)], "F"]
+SHORT_B = ["S", *[f"O{i}" for i in range(1, 10)], *DIAGONAL_B, "F"]
 ROUTES = {"outer": OUTER, "a": SHORT_A, "b": SHORT_B}
 
 LUCKY_LOCATIONS = {"O2", "O4", "O7", "O9", "O12", "O14", "O17", "O19", "A1", "A3", "B1", "B3", "C"}
@@ -714,6 +716,11 @@ class YutRoom:
 
     def snapshot(self) -> dict:
         turn_player = self.players.get(self.current_token) if self.current_token else None
+        special_locations = {
+            "normal": sorted(LUCKY_LOCATIONS),
+            "jackpot": sorted(JACKPOT_LOCATIONS),
+            "danger": sorted(DANGER_LOCATIONS),
+        } if self.mode == "lucky" else {"normal": [], "jackpot": [], "danger": []}
         return {
             "roomCode": self.room_code,
             "mode": self.mode,
@@ -731,11 +738,7 @@ class YutRoom:
             "winnerId": self.winner_id,
             "lastEvent": self.last_event,
             "rematchReady": [self.players[t].public_id for t in self.rematch_ready if t in self.players],
-            "lucky": {
-                "normal": sorted(LUCKY_LOCATIONS),
-                "jackpot": sorted(JACKPOT_LOCATIONS),
-                "danger": sorted(DANGER_LOCATIONS),
-            },
+            "lucky": special_locations,
             "cards": [public_card(card) for card in CARD_DEFINITIONS],
         }
 

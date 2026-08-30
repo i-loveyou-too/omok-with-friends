@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.game import GameError
 from app.main import app
-from app.yut import CARD_BY_ID, CARD_DEFINITIONS, CARD_TIER_WEIGHTS, MAX_CARD_CHAIN, ROUTES, YutRoom, yut_room_manager
+from app.yut import CARD_BY_ID, CARD_DEFINITIONS, CARD_TIER_WEIGHTS, DIAGONAL_A, DIAGONAL_B, MAX_CARD_CHAIN, ROUTES, YutRoom, yut_room_manager
 
 
 client = TestClient(app)
@@ -92,6 +92,65 @@ def test_saved_result_moves_entire_stack_with_one_path():
     assert leader.route == mate.route == "a"
     assert room.last_move["pieceIds"] == [0, 1]
     assert room.last_move["path"] == ["O4", "O5"]
+
+
+def test_shortcuts_cross_center_only_along_the_same_diagonal():
+    room, first, _ = room_with_players()
+    moving = piece(room, first)
+
+    assert DIAGONAL_A == ["O5", "A1", "A2", "C", "A3", "A4", "O15"]
+    assert DIAGONAL_B == ["O10", "B1", "B2", "C", "B3", "B4", "O20"]
+
+    moving.route = "a"
+    moving.index = ROUTES["a"].index("A2")
+    assert room._move_piece_steps(moving, 2) == ["C", "A3"]
+    assert moving.location == "A3"
+
+    moving.route = "b"
+    moving.index = ROUTES["b"].index("B2")
+    assert room._move_piece_steps(moving, 2) == ["C", "B3"]
+    assert moving.location == "B3"
+
+
+@pytest.mark.parametrize(("route", "start", "after_center"), [("a", "A3", "A2"), ("b", "B3", "B2")])
+def test_backdo_from_shortcut_stays_on_its_diagonal(route, start, after_center):
+    room, first, _ = room_with_players()
+    moving = piece(room, first)
+    moving.route = route
+    moving.index = ROUTES[route].index(start)
+    assert room._move_piece_steps(moving, -1) == ["C"]
+    assert moving.location == "C"
+    assert room._move_piece_steps(moving, -1) == [after_center]
+    assert moving.location == after_center
+    assert moving.route == route
+
+
+@pytest.mark.parametrize(("route", "start", "steps"), [("a", "A4", 7), ("b", "B4", 2)])
+def test_shortcut_routes_reach_finish_without_using_cross_lines(route, start, steps):
+    room, first, _ = room_with_players()
+    moving = piece(room, first)
+    moving.route = route
+    moving.index = ROUTES[route].index(start)
+    path = room._move_piece_steps(moving, steps)
+    assert path[-1] == "F"
+    assert moving.finished is True
+
+
+def test_stack_and_capture_remain_authoritative_at_shortcut_center():
+    room, first, second = room_with_players()
+    leader, mate = piece(room, first), piece(room, first, 1)
+    target = piece(room, second)
+    leader.route = mate.route = "b"
+    leader.index = mate.index = ROUTES["b"].index("B2")
+    target.route = "a"
+    target.index = ROUTES["a"].index("C")
+    roll = room.roll(first.token, "do")
+    room.move(first.token, leader.id, roll["id"])
+    assert leader.location == mate.location == "C"
+    assert room.pending_capture is not None
+    room.confirm_capture(first.token)
+    assert target.location == "S"
+    assert room.must_roll is True
 
 
 def test_capture_waits_for_confirmation_then_grants_bonus_throw():
@@ -377,6 +436,32 @@ def test_move_records_deterministic_stepwise_path():
     assert room.last_move["path"] == ["O1", "O2", "O3"]
     assert room.last_move["to"] == "O3"
     assert room.last_move["pieceIds"] == [0]
+
+
+def test_classic_mode_exposes_only_normal_tiles_and_never_draws_cards():
+    room, first, _ = room_with_players("classic")
+    moving = piece(room, first)
+
+    assert room.snapshot()["lucky"] == {"normal": [], "jackpot": [], "danger": []}
+    roll = room.roll(first.token, "gae")
+    room.move(first.token, moving.id, roll["id"])
+    assert moving.location == "O2"
+    assert room.pending_card is None
+    assert room.last_event["type"] != "card_drawn"
+    assert room.force_card_draw_for_test(first.public_id, moving.id, "nothing") is False
+
+
+def test_lucky_mode_exposes_special_tiles_and_draws_on_them():
+    room, first, _ = room_with_players("lucky")
+    moving = piece(room, first)
+    snapshot = room.snapshot()
+
+    assert "O2" in snapshot["lucky"]["normal"]
+    assert "O5" in snapshot["lucky"]["jackpot"]
+    assert "O10" in snapshot["lucky"]["danger"]
+    moving.index = ROUTES["outer"].index("O2")
+    assert room.force_card_draw_for_test(first.public_id, moving.id, "nothing") is True
+    assert room.pending_card["cardId"] == "nothing"
 
 
 def test_frozen_piece_consumes_one_result_without_discarding_pool():

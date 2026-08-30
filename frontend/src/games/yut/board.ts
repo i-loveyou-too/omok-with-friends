@@ -10,6 +10,12 @@ export const BOARD_POSITIONS: Record<string, [number, number]> = {
 export const OUTER_KEYS = ['S', ...Array.from({ length: 20 }, (_, i) => `O${i + 1}`)]
 export const INNER_KEYS = ['A1', 'A2', 'C', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4']
 
+export const BOARD_PATH_LINES = [
+  'M8 92H92V8H8Z',
+  'M8 8L92 92',
+  'M92 8L8 92',
+]
+
 export const ROLL_LABEL: Record<string, string> = {
   backdo: '빽도', do: '도', gae: '개', geol: '걸', yut: '윷', mo: '모',
 }
