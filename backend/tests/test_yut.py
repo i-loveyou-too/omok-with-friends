@@ -144,6 +144,103 @@ def test_keep_card_persists_in_authoritative_hand_snapshot_and_reconnect():
     assert room.snapshot()["hands"][first.public_id][0]["cardId"] == "swap"
 
 
+def test_danger_card_cannot_be_kept_and_forces_target_selection():
+    room, first, _ = room_with_players("lucky")
+    moving = piece(room, first)
+    moving.index = 4
+    room.must_roll = False
+    room.pending_rolls = [{"id": 70, "name": "do", "steps": 1}]
+    assert room.force_card_draw_for_test(first.public_id, moving.id, "minus_three")
+    assert room.pending_card["forced"] is True
+    with pytest.raises(GameError) as exc:
+        room.card_choice(first.token, "keep")
+    assert exc.value.code == "danger_card_forced"
+    assert room.pending_card is not None
+    room.card_choice(first.token, "use", moving.id)
+    assert moving.location == "O1"
+    assert room.pending_card is None
+    assert room.last_event["forced"] is True
+    assert room.hands[first.public_id] == []
+
+
+def test_forced_split_requires_an_eligible_own_stack_and_cannot_cancel():
+    room, first, _ = room_with_players("lucky")
+    leader = piece(room, first)
+    mate = piece(room, first, 1)
+    leader.index = mate.index = 18
+    room.must_roll = False
+    room.pending_rolls = [{"id": 71, "name": "do", "steps": 1}]
+    room.force_card_draw_for_test(first.public_id, leader.id, "forced_split")
+    with pytest.raises(GameError) as exc:
+        room.card_choice(first.token, "use", piece(room, first, 2).id)
+    assert exc.value.code == "stack_required"
+    assert room.pending_card is not None
+    room.card_choice(first.token, "use", leader.id)
+    assert {leader.location, mate.location} == {"O17", "O18"}
+    assert room.pending_card is None
+
+
+def test_forced_split_without_applicable_stack_is_safe_noop():
+    room, first, second = room_with_players("lucky")
+    moving = piece(room, first)
+    moving.index = 18
+    room.must_roll = False
+    assert room.force_card_draw_for_test(first.public_id, moving.id, "forced_split")
+    assert room.pending_card is None
+    assert room.last_event["type"] == "card_used"
+    assert room.last_event["noOp"] is True
+    assert room.current_token == second.token
+
+
+def test_minus_three_stale_draw_without_applicable_piece_cannot_block_game():
+    room, first, second = room_with_players("lucky")
+    stale_source = piece(room, second)
+    stale_source.index = 18
+    finish_except(room, first)
+    room.must_roll = False
+    assert room._maybe_draw_card(first.public_id, stale_source, forced_card_id="minus_three")
+    assert room.pending_card is None
+    assert room.status == "finished"
+
+
+def test_chaos_swap_auto_applies_and_noops_when_board_has_too_few_pieces():
+    room, first, second = room_with_players("lucky")
+    moving = piece(room, first)
+    moving.index = 18
+    room.must_roll = False
+    room.force_card_draw_for_test(first.public_id, moving.id, "chaos_swap")
+    assert room.pending_card is None
+    assert room.last_event["type"] == "card_used"
+    assert room.last_event["forced"] is True
+    assert room.last_event["noOp"] is True
+    assert room.current_token == second.token
+
+
+def test_chaos_swap_auto_applies_when_both_players_have_board_pieces():
+    room, first, second = room_with_players("lucky")
+    mine, theirs = piece(room, first), piece(room, second)
+    mine.index = 18
+    theirs.index = 6
+    room.must_roll = False
+    room.force_card_draw_for_test(first.public_id, mine.id, "chaos_swap")
+    assert room.pending_card is None
+    assert mine.location == "O6"
+    assert theirs.location == "O18"
+    assert room.last_move["reason"] == "card:chaos_swap"
+    assert room.current_token == second.token
+
+
+def test_client_action_ids_make_yut_bonus_roll_double_tap_idempotent():
+    room, first, _ = room_with_players()
+    assert room.accept_action(first.token, "roll-1") is True
+    room.roll(first.token, "yut")
+    assert room.accept_action(first.token, "roll-1") is False
+    assert [result["name"] for result in room.pending_rolls] == ["yut"]
+    assert room.accept_action(first.token, "roll-2") is True
+    room.roll(first.token, "gae")
+    assert [result["name"] for result in room.pending_rolls] == ["yut", "gae"]
+
+
 def test_invalid_target_does_not_consume_drawn_or_kept_card():
     room, first, _ = room_with_players("lucky")
     room.must_roll = False
@@ -213,7 +310,6 @@ def test_swap_kept_card_uses_explicit_own_and_opponent_targets():
         ("plus_four", "O6", False),
         ("teleport", "O6", False),
         ("golden_yut", "O3", True),
-        ("minus_three", "S", False),
     ],
 )
 def test_explicit_movement_card_targets(card_id, expected_location, grants_roll):
@@ -259,6 +355,19 @@ def test_card_movement_uses_capture_confirmation_and_draws_next_card(monkeypatch
     assert theirs.location == "S"
     assert room.pending_card is not None
     assert room.pending_card["cardId"] == "nothing"
+
+
+def test_card_movement_can_finish_last_piece_and_end_game():
+    room, first, _ = room_with_players("classic")
+    moving = piece(room, first)
+    finish_except(room, first, moving.id)
+    moving.index = 20
+    room.must_roll = False
+    room.hands[first.public_id].append({"instanceId": "finish", "cardId": "plus_one"})
+    room.use_kept_card(first.token, "finish", moving.id)
+    assert moving.finished is True
+    assert room.status == "finished"
+    assert room.winner_id == first.public_id
 
 
 def test_move_records_deterministic_stepwise_path():

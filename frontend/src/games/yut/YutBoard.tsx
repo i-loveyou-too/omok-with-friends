@@ -11,6 +11,7 @@ interface Props {
   selfId: string | null
   selectionMode: YutPieceSelectionMode
   selectedPieceIds?: number[]
+  selectablePieceKeys?: string[]
   onSelect: (piece: YutPiece) => void
   onHop?: () => void
 }
@@ -41,7 +42,7 @@ function groupedPieces(pieces: YutPiece[], locations: Record<string, string>) {
   }))
 }
 
-export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], onSelect, onHop }: Props) {
+export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], selectablePieceKeys, onSelect, onHop }: Props) {
   const [locations, setLocations] = useState<Record<string, string>>(() =>
     Object.fromEntries(state.pieces.map((piece) => [pieceKey(piece), piece.location])),
   )
@@ -127,6 +128,7 @@ export function YutBoard({ state, selfId, selectionMode, selectedPieceIds = [], 
 
   const selectable = (piece: YutPiece) => {
     if (!selectionMode || piece.finished) return false
+    if (selectablePieceKeys && !selectablePieceKeys.includes(pieceKey(piece))) return false
     if (selectionMode === 'opponent') return piece.ownerId !== selfId && !['S', 'F'].includes(piece.location)
     return piece.ownerId === selfId
   }

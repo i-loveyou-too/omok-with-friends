@@ -42,6 +42,7 @@ export interface YutCardInstance {
   ownerId?: string
   sourcePieceId?: number
   sourceLocation?: string
+  forced?: boolean
 }
 
 export interface YutMovePresentation {
@@ -74,6 +75,8 @@ export interface LuckyEvent {
   targetPieceIds?: number[]
   capturedPieceIds?: number[]
   grantReroll?: boolean
+  forced?: boolean
+  noOp?: boolean
 }
 
 export interface YutCardDefinition {

@@ -128,10 +128,14 @@ export function useYutAudio(state: YutState | null, selfId: string | null) {
 
     const oldEvent = JSON.stringify(before.lastEvent)
     const newEvent = JSON.stringify(state.lastEvent)
-    if (oldEvent !== newEvent && state.lastEvent?.type === 'lucky_card') {
+    const cardEventChanged = oldEvent !== newEvent && ['card_drawn', 'card_used'].includes(state.lastEvent?.type ?? '')
+    const pendingCardChanged = before.pendingCard?.instanceId !== state.pendingCard?.instanceId && Boolean(state.pendingCard)
+    if (cardEventChanged || pendingCardChanged) {
+      const cardId = state.pendingCard?.cardId ?? state.lastEvent?.cardId ?? state.lastEvent?.code
+      const tier = state.cards.find((card) => card.id === cardId)?.tier ?? state.lastEvent?.tier
       play('luckyCard')
-      if (state.lastEvent.tier === '✨') play('jackpotCard')
-      if (state.lastEvent.tier === '💀') play('dangerCard')
+      if (tier === '✨') play('jackpotCard')
+      if (tier === '💀') play('dangerCard')
     }
 
     const beforePieces = new Map(before.pieces.map((piece) => [`${piece.ownerId}:${piece.id}`, piece]))

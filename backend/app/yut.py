@@ -33,6 +33,7 @@ LUCKY_LOCATIONS = {"O2", "O4", "O7", "O9", "O12", "O14", "O17", "O19", "A1", "A3
 JACKPOT_LOCATIONS = {"O5", "O15", "A2", "B2"}
 DANGER_LOCATIONS = {"O10", "O18", "A4", "B4"}
 MAX_CARD_CHAIN = 4
+MAX_RECENT_ACTION_IDS = 128
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,7 @@ class YutRoom:
         self.last_event: Optional[dict] = None
         self.game_number = 1
         self.rematch_ready: set[str] = set()
+        self.recent_action_ids: Dict[str, List[str]] = {}
         self.last_active = time.monotonic()
 
     def _player_by_public(self, public_id: str) -> Optional[YutPlayer]:
@@ -212,6 +214,18 @@ class YutRoom:
             raise GameError("not_playing", "지금은 플레이 중이 아니에요.")
         if token != self.current_token:
             raise GameError("not_your_turn", "상대 차례예요.")
+
+    def accept_action(self, token: str, action_id: Optional[str]) -> bool:
+        """Claim a client action id so retransmitted taps cannot mutate twice."""
+        if not action_id:
+            return True
+        recent = self.recent_action_ids.setdefault(token, [])
+        if action_id in recent:
+            return False
+        recent.append(action_id)
+        if len(recent) > MAX_RECENT_ACTION_IDS:
+            del recent[:-MAX_RECENT_ACTION_IDS]
+        return True
 
     @property
     def current_owner(self) -> Optional[str]:
@@ -449,6 +463,7 @@ class YutRoom:
             "ownerId": owner_id,
             "sourcePieceId": piece.id,
             "sourceLocation": piece.location,
+            "forced": card.tier == "💀",
         }
         if emit_event:
             self.last_event = {
@@ -460,10 +475,40 @@ class YutRoom:
                 "effect": card.effect,
                 "probability": card.weight / CARD_TIER_WEIGHTS[card.tier],
             }
+
+        if card.tier == "💀" and (card.id == "chaos_swap" or not self._danger_targets(owner_id, card.id)):
+            instance = self.pending_card
+            self.pending_card = None
+            if card.id == "chaos_swap":
+                moved = self._apply_card(owner_id, card.id, None, None, forced=True)
+                self._after_card_effect(owner_id, moved)
+            else:
+                self.last_event = {
+                    "type": "card_used",
+                    "cardId": card.id,
+                    "tier": card.tier,
+                    "forced": True,
+                    "noOp": True,
+                    "message": "적용할 수 있는 말이 없어 벌칙을 건너뛰었어요.",
+                    **instance,
+                }
+                self._finish_action(owner_id)
+            return True
         return True
 
     def force_card_draw_for_test(self, owner_id: str, piece_id: int, card_id: str) -> bool:
         return self._maybe_draw_card(owner_id, self._piece(owner_id, piece_id), forced_card_id=card_id)
+
+    def _danger_targets(self, owner_id: str, card_id: str) -> List[Piece]:
+        board_pieces = [
+            piece for piece in self.pieces
+            if piece.owner_id == owner_id and not piece.finished and piece.location not in {"S", "F"}
+        ]
+        if card_id == "minus_three":
+            return board_pieces
+        if card_id == "forced_split":
+            return [piece for piece in board_pieces if len(self._same_stack(piece)) >= 2]
+        return []
 
     def _opponent_piece(self, owner_id: str, piece_id: Optional[int], *, board_only: bool = False) -> Piece:
         if piece_id is None:
@@ -476,7 +521,15 @@ class YutRoom:
             raise GameError("select_board_piece", "판 위에 있는 상대 말을 선택해 주세요.")
         return target
 
-    def _apply_card(self, owner_id: str, card_id: str, piece_id: Optional[int], target_piece_id: Optional[int]) -> Optional[Piece]:
+    def _apply_card(
+        self,
+        owner_id: str,
+        card_id: str,
+        piece_id: Optional[int],
+        target_piece_id: Optional[int],
+        *,
+        forced: bool = False,
+    ) -> Optional[Piece]:
         if card_id not in CARD_BY_ID:
             raise GameError("invalid_card", "카드를 다시 확인해 주세요.")
         own = self._piece(owner_id, piece_id) if piece_id is not None else None
@@ -488,8 +541,11 @@ class YutRoom:
 
         moved: Optional[Piece] = None
         grant_roll = False
+        no_op = False
         if card_id in {"plus_one", "plus_two", "minus_one", "plus_four", "teleport", "golden_yut", "minus_three"}:
             moved = need_own()
+            if card_id == "minus_three" and moved not in self._danger_targets(owner_id, card_id):
+                raise GameError("select_board_piece", "판 위에 있는 내 말을 선택해 주세요.")
             steps = {"plus_one": 1, "plus_two": 2, "minus_one": -1, "plus_four": 4, "teleport": 4, "golden_yut": 1, "minus_three": -3}[card_id]
             self._move_stack_steps(moved, steps, f"card:{card_id}")
             grant_roll = card_id == "golden_yut"
@@ -541,9 +597,9 @@ class YutRoom:
                 self._move_stack_steps(moved, 5, f"card:{card_id}")
         elif card_id == "forced_split":
             source = need_own()
-            stack = self._same_stack(source)
-            if len(stack) < 2:
+            if source not in self._danger_targets(owner_id, card_id):
                 raise GameError("stack_required", "업혀 있는 내 말을 선택해 주세요.")
+            stack = self._same_stack(source)
             for offset, mate in enumerate(stack[1:], start=1):
                 self._move_piece_steps(mate, -offset)
             self._record_move({"reason": "card:forced_split", "ownerId": owner_id, "pieceIds": [p.id for p in stack[1:]], "from": source.location, "path": [], "to": None})
@@ -557,9 +613,22 @@ class YutRoom:
                 mine.index, theirs.index = theirs.index, mine.index
                 self._record_move({"reason": "card:chaos_swap", "swap": [{"ownerId": mine.owner_id, "pieceId": mine.id, "from": mine_from, "to": mine.location}, {"ownerId": theirs.owner_id, "pieceId": theirs.id, "from": theirs_from, "to": theirs.location}]})
                 moved = mine
+            else:
+                no_op = True
         if grant_roll:
             self.must_roll = True
-        self.last_event = {"type": "card_used", "cardId": card_id, "pieceId": piece_id, "targetPieceId": target_piece_id, "grantReroll": grant_roll}
+        card = CARD_BY_ID[card_id]
+        self.last_event = {
+            "type": "card_used",
+            "cardId": card_id,
+            "tier": card.tier,
+            "forced": forced,
+            "noOp": no_op,
+            "message": "바꿀 말이 부족해 벌칙을 건너뛰었어요." if no_op else None,
+            "pieceId": piece_id,
+            "targetPieceId": target_piece_id,
+            "grantReroll": grant_roll,
+        }
         return moved
 
     def _after_card_effect(self, owner_id: str, moved: Optional[Piece]) -> None:
@@ -581,6 +650,8 @@ class YutRoom:
             raise GameError("not_your_card", "상대가 카드를 고르는 중이에요.")
         instance = self.pending_card
         if choice == "keep":
+            if CARD_BY_ID[instance["cardId"]].tier == "💀":
+                raise GameError("danger_card_forced", "벌칙카드는 KEEP할 수 없어요. 적용할 말을 골라 주세요.")
             self.pending_card = None
             self.hands[owner_id].append({"instanceId": instance["instanceId"], "cardId": instance["cardId"]})
             self.last_event = {"type": "card_kept", **instance}
@@ -588,7 +659,13 @@ class YutRoom:
             return
         if choice != "use":
             raise GameError("invalid_card_choice", "카드를 지금 사용하거나 KEEP해 주세요.")
-        moved = self._apply_card(owner_id, instance["cardId"], piece_id, target_piece_id)
+        moved = self._apply_card(
+            owner_id,
+            instance["cardId"],
+            piece_id,
+            target_piece_id,
+            forced=CARD_BY_ID[instance["cardId"]].tier == "💀",
+        )
         self.pending_card = None
         self._after_card_effect(owner_id, moved)
 
@@ -602,6 +679,8 @@ class YutRoom:
         instance = next((card for card in hand if card["instanceId"] == instance_id), None)
         if instance is None:
             raise GameError("card_not_found", "KEEP한 카드를 찾을 수 없어요.")
+        if CARD_BY_ID[instance["cardId"]].tier == "💀":
+            raise GameError("danger_card_forced", "벌칙카드는 KEEP할 수 없어요.")
         moved = self._apply_card(owner_id, instance["cardId"], piece_id, target_piece_id)
         hand.remove(instance)
         self._after_card_effect(owner_id, moved)

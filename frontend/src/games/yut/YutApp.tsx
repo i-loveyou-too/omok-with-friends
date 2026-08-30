@@ -15,6 +15,7 @@ const APP_BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? `${APP_BASE}/api`
 const AUTO_CARDS = new Set(['reroll', 'extra_turn', 'nothing', 'last_place_boost', 'chaos_swap'])
 const OPPONENT_CARDS = new Set(['opponent_back', 'split'])
+const TARGETED_DANGER_CARDS = new Set(['minus_three', 'forced_split'])
 
 interface CardTargetMode {
   source: 'drawn' | 'hand'
@@ -40,9 +41,17 @@ function useSharedRollPresentation(state: YutState | null, playSound: (sound: Yu
   const [presenting, setPresenting] = useState<YutRollResult | null>(null)
   const [showResult, setShowResult] = useState(false)
   const seenRollId = useRef<number | null>(null)
+  const initialized = useRef(false)
   const roll = state?.lastEvent?.type === 'roll' ? state.lastEvent.roll : undefined
+  const hasState = state !== null
 
   useEffect(() => {
+    if (!state) return
+    if (!initialized.current) {
+      initialized.current = true
+      seenRollId.current = roll?.id ?? null
+      return
+    }
     if (!roll || seenRollId.current === roll.id) return
     seenRollId.current = roll.id
     setPresenting(roll)
@@ -58,7 +67,7 @@ function useSharedRollPresentation(state: YutState | null, playSound: (sound: Yu
       window.clearTimeout(reveal)
       window.clearTimeout(done)
     }
-  }, [playSound, roll?.id])
+  }, [hasState, playSound, roll?.id])
 
   return { presenting, showResult }
 }
@@ -153,7 +162,7 @@ function YutProfileForm({ roomCode, onSubmit, onBack }: { roomCode: string; onSu
 }
 
 function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; profile: YutProfile; onSession: (session: YutSession) => void; onLeave: () => void }) {
-  const { state, selfId, status, error, send } = useYutSocket(roomCode, profile, onSession)
+  const { state, selfId, status, error, actionPending, send } = useYutSocket(roomCode, profile, onSession)
   const audio = useYutAudio(state, selfId)
   const { presenting, showResult } = useSharedRollPresentation(state, audio.play)
   const [copied, setCopied] = useState(false)
@@ -172,9 +181,20 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
 
   useEffect(() => {
     if (!state?.pendingCard && cardTarget?.source === 'drawn') setCardTarget(null)
-  }, [cardTarget?.source, state?.pendingCard])
+    if (cardTarget?.source === 'hand' && !state?.hands[selfId ?? '']?.some((card) => card.instanceId === cardTarget.instanceId)) setCardTarget(null)
+  }, [cardTarget, selfId, state?.hands, state?.pendingCard])
 
-  const shouldFocusBoard = Boolean(cardTarget) || Boolean(
+  useEffect(() => {
+    const pending = state?.pendingCard
+    if (!pending || pending.ownerId !== selfId) return
+    const definition = state.cards.find((card) => card.id === pending.cardId)
+    if (definition?.tier !== '💀' || !TARGETED_DANGER_CARDS.has(definition.id)) return
+    setCardTarget((current) => current?.source === 'drawn' && current.cardId === definition.id
+      ? current
+      : { source: 'drawn', cardId: definition.id })
+  }, [selfId, state?.cards, state?.pendingCard])
+
+  const shouldFocusBoard = Boolean(presenting) || Boolean(cardTarget) || Boolean(
     state
     && state.status === 'playing'
     && state.turnPlayerId === selfId
@@ -202,8 +222,8 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
   const opponent = state.players.find((player) => player.id !== selfId)
   const myTurn = state.turnPlayerId === selfId && state.status === 'playing'
   const blocking = Boolean(state.pendingCapture || state.pendingCard)
-  const canRoll = myTurn && state.mustRoll && !blocking && !presenting
-  const canMove = myTurn && !state.mustRoll && !blocking && selectedRollId !== null && !presenting && !cardTarget
+  const canRoll = myTurn && state.mustRoll && !blocking && !presenting && !actionPending
+  const canMove = myTurn && !state.mustRoll && !blocking && selectedRollId !== null && !presenting && !cardTarget && !actionPending
   const hand = selfId ? state.hands[selfId] ?? [] : []
   const winner = state.players.find((player) => player.id === state.winnerId)
   const selfHome = state.pieces.filter((piece) => piece.ownerId === selfId && piece.location === 'S' && !piece.finished)
@@ -212,11 +232,36 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
     : 0
   const pendingCardDefinition = state.cards.find((card) => card.id === state.pendingCard?.cardId)
 
+  const stackSize = (piece: YutPiece) => state.pieces.filter((candidate) => (
+    candidate.ownerId === piece.ownerId
+    && !candidate.finished
+    && candidate.location === piece.location
+    && !['S', 'F'].includes(candidate.location)
+  )).length
+
+  const isSelectableForCard = (piece: YutPiece) => {
+    if (!cardTarget || piece.finished || actionPending) return false
+    const isMine = piece.ownerId === selfId
+    const isOnBoard = !['S', 'F'].includes(piece.location)
+    if (cardTarget.cardId === 'swap') return cardTarget.ownPieceId === undefined ? isMine && isOnBoard : !isMine && isOnBoard
+    if (cardTarget.cardId === 'merge') return isMine && (cardTarget.ownPieceId === undefined || piece.id !== cardTarget.ownPieceId)
+    if (cardTarget.cardId === 'split') return !isMine && isOnBoard && stackSize(piece) >= 2
+    if (cardTarget.cardId === 'opponent_back') return !isMine && isOnBoard
+    if (cardTarget.cardId === 'minus_three') return isMine && isOnBoard
+    if (cardTarget.cardId === 'forced_split') return isMine && isOnBoard && stackSize(piece) >= 2
+    return isMine
+  }
+
+  const selectablePieceKeys = cardTarget
+    ? state.pieces.filter(isSelectableForCard).map((piece) => `${piece.ownerId}:${piece.id}`)
+    : undefined
+
   const cardPayload = (target: CardTargetMode, pieceId?: number, targetPieceId?: number) => target.source === 'drawn'
     ? { type: 'card_choice', choice: 'use', pieceId, targetPieceId }
     : { type: 'use_card', instanceId: target.instanceId, pieceId, targetPieceId }
 
   const beginCardUse = (target: CardTargetMode) => {
+    if (actionPending) return
     if (AUTO_CARDS.has(target.cardId)) {
       send(cardPayload(target))
       return
@@ -225,6 +270,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
   }
 
   const selectPiece = (selected: YutPiece) => {
+    if (actionPending) return
     if (!cardTarget) {
       if (selectedRollId !== null && send({ type: 'move', pieceId: selected.id, rollId: selectedRollId })) setSelectedRollId(null)
       return
@@ -241,7 +287,6 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
     } else {
       send(cardPayload(cardTarget, selected.id))
     }
-    setCardTarget(null)
   }
 
   let selectionMode: YutPieceSelectionMode = canMove ? 'move' : null
@@ -251,7 +296,11 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
   }
 
   const cardGuide = cardTarget
-    ? cardTarget.cardId === 'swap'
+    ? cardTarget.cardId === 'minus_three'
+      ? '💀 벌칙! 뒤로 갈 말을 골라줘!'
+      : cardTarget.cardId === 'forced_split'
+        ? '💀 벌칙! 해산할 말을 골라줘!'
+        : cardTarget.cardId === 'swap'
       ? cardTarget.ownPieceId === undefined ? '자리 바꿀 내 말을 골라줘!' : '자리 바꿀 상대 말을 골라줘!'
       : cardTarget.cardId === 'merge'
         ? cardTarget.ownPieceId === undefined ? '합체의 기준이 될 내 말을 골라줘!' : '함께 합칠 내 말을 하나 더 골라줘!'
@@ -278,12 +327,12 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
       <div ref={boardColumnRef} className="yut-board-column">
         {state.pendingCapture && state.pendingCapture.ownerId !== selfId && <div className="yut-selection-guide">상대가 잡기를 확인하는 중…</div>}
         {state.pendingCard && state.pendingCard.ownerId !== selfId && <div className="yut-selection-guide">상대가 운빨카드를 고르는 중…</div>}
-        {cardGuide && <div className="yut-selection-guide">{cardGuide}</div>}
+        {cardGuide && <div className={`yut-selection-guide ${pendingCardDefinition?.tier === '💀' ? 'is-danger' : ''}`} role="status">{cardGuide}</div>}
         {!cardTarget && myTurn && state.mustRoll && !blocking && <div className="yut-selection-guide">{state.pendingRolls.length ? '윷/모가 나왔어요! 추가 윷부터 모두 던져줘!' : '윷을 던져줘!'}</div>}
         {!cardTarget && myTurn && !state.mustRoll && state.pendingRolls.length > 1 && selectedRollId === null && !blocking && <div className="yut-selection-guide">사용할 윷 결과를 먼저 골라줘!</div>}
-        {canMove && <div className="yut-selection-guide">움직일 말을 골라줘!</div>}
+        {canMove && <div className="yut-selection-guide">{state.pendingRolls.find((roll) => roll.id === selectedRollId) ? `${ROLL_LABEL[state.pendingRolls.find((roll) => roll.id === selectedRollId)!.name]} 선택됨 · 움직일 말을 골라줘!` : '움직일 말을 골라줘!'}</div>}
         <div className="yut-board-stage">
-          <YutBoard state={state} selfId={selfId} selectionMode={selectionMode} selectedPieceIds={cardTarget?.ownPieceId === undefined ? [] : [cardTarget.ownPieceId]} onSelect={selectPiece} onHop={() => audio.play('landing')} />
+          <YutBoard state={state} selfId={selfId} selectionMode={selectionMode} selectedPieceIds={cardTarget?.ownPieceId === undefined ? [] : [cardTarget.ownPieceId]} selectablePieceKeys={selectablePieceKeys} onSelect={selectPiece} onHop={() => audio.play('landing')} />
 
           {presenting && (
             <div className="yut-board-throw-overlay">
@@ -299,7 +348,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
               </div>
 
               {showResult && (
-                <div className="yut-roll-readout" role="status">
+                <div className={`yut-roll-readout is-${presenting.name}`} role="status">
                   <strong>{ROLL_LABEL[presenting.name]}!</strong>
                   <span>{presenting.steps}칸 이동</span>
                 </div>
@@ -316,7 +365,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
 
             <div className="yut-home-grid">
               {selfHome.map((homePiece) => {
-                const canSelectHome = selectionMode === 'move' || selectionMode === 'own'
+                const canSelectHome = !actionPending && (selectionMode === 'move' || (selectionMode === 'own' && isSelectableForCard(homePiece)))
 
                 return (
                   <button
@@ -335,17 +384,19 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
           </section>
         )}
         <div className="yut-roll-result"><img src={yutAssets.ui.yutBag} alt="윷 주머니" /></div>
-        {state.pendingRolls.length > 0 && <div className="yut-roll-pool" aria-label="저장된 윷 결과">{state.pendingRolls.map((roll) => <button key={roll.id} className={`yut-roll-chip ${selectedRollId === roll.id ? 'selected' : ''}`} disabled={!myTurn || state.mustRoll || blocking || Boolean(presenting)} onClick={() => setSelectedRollId(roll.id)}><img src={yutResultAsset(roll.name) ?? yutAssets.results.do} alt="" /><span>{ROLL_LABEL[roll.name]} · {roll.steps}칸</span></button>)}</div>}
-        <button className="yut-primary yut-roll-button" disabled={!canRoll} onClick={() => send({ type: 'roll' })}>{presenting ? <span>윷이 날아간다!</span> : <img src={yutAssets.ui.rollButton} alt="윷 던지기!" />}</button>
-        {state.pendingCapture?.ownerId === selfId && <div className="yut-action-sheet" role="dialog" aria-label="잡기 확인"><h3>잡을까요?</h3><p>상대 말 {state.pendingCapture.targetPieceIds.length}개를 잡을 수 있어!</p><button className="yut-primary" onClick={() => send({ type: 'confirm_capture' })}>잡기!</button></div>}
-        {state.pendingCard?.ownerId === selfId && pendingCardDefinition && <CardChoiceSheet card={pendingCardDefinition} onKeep={() => send({ type: 'card_choice', choice: 'keep' })} onUse={() => beginCardUse({ source: 'drawn', cardId: pendingCardDefinition.id })} />}
+        {state.pendingRolls.length > 0 && <div className="yut-roll-pool" aria-label="저장된 윷 결과">{state.pendingRolls.map((roll) => <button key={roll.id} className={`yut-roll-chip ${selectedRollId === roll.id ? 'selected' : ''}`} aria-pressed={selectedRollId === roll.id} disabled={!myTurn || state.mustRoll || blocking || Boolean(presenting) || actionPending} onClick={() => setSelectedRollId(roll.id)}><img src={yutResultAsset(roll.name) ?? yutAssets.results.do} alt="" /><span>{ROLL_LABEL[roll.name]} · {roll.steps}칸</span></button>)}</div>}
+        <button className="yut-primary yut-roll-button" disabled={!canRoll} onClick={() => send({ type: 'roll' })}>{presenting || actionPending ? <span>{presenting ? '윷이 날아간다!' : '결과 확인 중…'}</span> : <img src={yutAssets.ui.rollButton} alt="윷 던지기!" />}</button>
+        {state.pendingCapture?.ownerId === selfId && <div className="yut-action-sheet" role="dialog" aria-label="잡기 확인"><h3>잡을까요?</h3><p>상대 말 {state.pendingCapture.targetPieceIds.length}개를 잡을 수 있어!</p><button className="yut-primary" disabled={actionPending} onClick={() => send({ type: 'confirm_capture' })}>{actionPending ? '잡는 중…' : '잡기!'}</button></div>}
+        {state.pendingCard?.ownerId === selfId && pendingCardDefinition && (pendingCardDefinition.tier === '💀'
+          ? <ForcedCardSheet card={pendingCardDefinition} />
+          : <CardChoiceSheet card={pendingCardDefinition} disabled={actionPending} onKeep={() => send({ type: 'card_choice', choice: 'keep' })} onUse={() => beginCardUse({ source: 'drawn', cardId: pendingCardDefinition.id })} />)}
         <section className="yut-hand" aria-label="KEEP한 카드"><b className="yut-hand-title">KEEP 카드 {hand.length}</b>{hand.map((instance) => {
           const definition = state.cards.find((card) => card.id === instance.cardId)
-          return definition && <button key={instance.instanceId} className="yut-hand-card" disabled={!myTurn || state.mustRoll || blocking || Boolean(presenting)} onClick={() => beginCardUse({ source: 'hand', instanceId: instance.instanceId, cardId: instance.cardId })}><img src={yutCardAsset(instance.cardId) ?? ''} alt="" /><span>{definition.label}</span></button>
+          return definition && <button key={instance.instanceId} className="yut-hand-card" disabled={!myTurn || state.mustRoll || blocking || Boolean(presenting) || actionPending} onClick={() => beginCardUse({ source: 'hand', instanceId: instance.instanceId, cardId: instance.cardId })}><img src={yutCardAsset(instance.cardId) ?? ''} alt="" /><span>{definition.label}</span></button>
         })}</section>
         {event?.type === 'card_used' && eventCard && <div className={`yut-event yut-event--${eventTileKind}`}><img className="yut-event-card" src={yutCardAsset(eventCard.id) ?? ''} alt="" /><strong>카드 사용!</strong><b>{eventCard.label}</b><span>{eventCard.effect}</span></div>}
         {event?.type === 'capture_confirmed' && <div className="yut-capture-event"><img src={yutAssets.ui.capture} alt="" /><b>잡았습니다! 한 번 더!</b></div>}
-        {state.status === 'finished' && <button className="yut-secondary" onClick={() => send({ type: 'rematch_request' })}><img src={yutAssets.ui.finish} alt="완주" />한 판 더?</button>}
+        {state.status === 'finished' && <button className="yut-secondary" disabled={actionPending || Boolean(selfId && state.rematchReady.includes(selfId))} onClick={() => send({ type: 'rematch_request' })}><img src={yutAssets.ui.finish} alt="완주" />{selfId && state.rematchReady.includes(selfId) ? '상대를 기다리는 중…' : actionPending ? '신청 중…' : '한 판 더?'}</button>}
         <p className="yut-rule">윷·모 또는 상대 말을 잡으면 한 번 더!<span className="yut-rule-tiles"><img src={yutTileAsset('lucky')} alt="행운칸" /><img src={yutTileAsset('jackpot')} alt="대박칸" /><img src={yutTileAsset('danger')} alt="위험칸" /></span></p>
       </aside>
     </section>
@@ -353,10 +404,17 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
   </main>
 }
 
-function CardChoiceSheet({ card, onKeep, onUse }: { card: YutCardDefinition; onKeep: () => void; onUse: () => void }) {
+function CardChoiceSheet({ card, disabled, onKeep, onUse }: { card: YutCardDefinition; disabled: boolean; onKeep: () => void; onUse: () => void }) {
   return <div className="yut-action-sheet yut-card-choice" role="dialog" aria-label="운빨카드 선택">
     <img src={yutCardAsset(card.id) ?? ''} alt="" />
     <div><small>{card.tier} 운빨카드</small><h3>{card.label}</h3><p>{card.effect}</p></div>
-    <div className="yut-card-choice-actions"><button className="yut-secondary" onClick={onKeep}>KEEP</button><button className="yut-primary" onClick={onUse}>지금 사용</button></div>
+    <div className="yut-card-choice-actions"><button className="yut-secondary" disabled={disabled} onClick={onKeep}>KEEP</button><button className="yut-primary" disabled={disabled} onClick={onUse}>지금 사용</button></div>
+  </div>
+}
+
+function ForcedCardSheet({ card }: { card: YutCardDefinition }) {
+  return <div className="yut-action-sheet yut-card-choice yut-card-choice--forced" role="dialog" aria-label="벌칙카드 강제 적용">
+    <img src={yutCardAsset(card.id) ?? ''} alt="" />
+    <div><small>💀 벌칙카드 · KEEP 불가</small><h3>{card.label}</h3><p>{card.effect}</p><b>{card.id === 'forced_split' ? '업힌 내 말을 선택하면 즉시 해산돼요.' : '판 위의 내 말을 선택하면 즉시 적용돼요.'}</b></div>
   </div>
 }
