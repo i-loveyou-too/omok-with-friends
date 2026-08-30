@@ -47,3 +47,6 @@
 @keyframes secret-pot-candy-pop{from{opacity:0;transform:rotate(var(--rot)) scale(0)}to{opacity:1;transform:rotate(var(--rot)) scale(var(--scale))}}
 @media(max-width:760px){.secret-pot-pile{height:42px}.secret-pot-candy>b{font-size:16px}.secret-pot-pile.is-rich .secret-pot-candy>b{font-size:18px}}
 @media(prefers-reduced-motion:reduce){.secret-pot-candy>b{animation:none}}
+
+.minigame-select-card--curling{background:linear-gradient(145deg,#dff6ff,#c8e8f7);color:#36576b}
+.minigame-select-card--curling>img{object-fit:cover;object-position:center;border-radius:22px;filter:drop-shadow(0 10px 10px rgba(60,111,137,.12))}

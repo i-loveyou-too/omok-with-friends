@@ -8,6 +8,7 @@ import { MinigameHub } from './components/MinigameHub'
 import { ProfileForm } from './components/ProfileForm'
 import { SecretCardLobby } from './components/SecretCardLobby'
 import { SecretCardRoom } from './components/SecretCardRoom'
+import { CurlingApp } from './games/curling/CurlingApp'
 import { YutApp } from './games/yut/YutApp'
 import type { Profile, Session } from './types'
 
@@ -18,6 +19,7 @@ type Route =
   | { kind: 'hub' }
   | { kind: 'omok' }
   | { kind: 'yut' }
+  | { kind: 'curling' }
   | { kind: 'secret-card' }
   | { kind: 'find-match' }
   | { kind: 'omok-room'; roomCode: string | null; invalid: boolean }
@@ -29,6 +31,7 @@ function routeFromPath(): Route {
   if (normalized === APP_BASE || normalized === '/') return { kind: 'hub' }
   if (normalized === `${APP_BASE}/omok`) return { kind: 'omok' }
   if (normalized === `${APP_BASE}/yut` || normalized.startsWith(`${APP_BASE}/yut/`)) return { kind: 'yut' }
+  if (normalized === `${APP_BASE}/curling` || normalized.startsWith(`${APP_BASE}/curling/`)) return { kind: 'curling' }
   if (normalized === `${APP_BASE}/secret-card`) return { kind: 'secret-card' }
   if (normalized === `${APP_BASE}/find-match`) return { kind: 'find-match' }
   const escaped = APP_BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -101,6 +104,7 @@ export default function App() {
   const goHub = () => navigate(`${APP_BASE}/`, { kind: 'hub' })
   const goOmok = () => navigate(`${APP_BASE}/omok`, { kind: 'omok' })
   const goYut = () => navigate(`${APP_BASE}/yut/`, { kind: 'yut' })
+  const goCurling = () => navigate(`${APP_BASE}/curling/`, { kind: 'curling' })
   const goSecretCard = () => navigate(`${APP_BASE}/secret-card`, { kind: 'secret-card' })
   const goFindMatch = () => navigate(`${APP_BASE}/find-match`, { kind: 'find-match' })
   const enterOmok = (roomCode: string) => navigate(`${APP_BASE}/room/${roomCode}`, { kind: 'omok-room', roomCode, invalid: false })
@@ -114,8 +118,9 @@ export default function App() {
   const roomHome = roomRoute?.kind === 'secret-card-room' ? goSecretCard : roomRoute?.kind === 'find-match-room' ? goFindMatch : goOmok
 
   if (roomMissing) return <EmptyRoom onHome={roomHome} />
-  if (route.kind === 'hub') return <MinigameHub onOmok={goOmok} onSecretCard={goSecretCard} onYut={goYut} onFindMatch={goFindMatch} />
+  if (route.kind === 'hub') return <MinigameHub onOmok={goOmok} onSecretCard={goSecretCard} onYut={goYut} onFindMatch={goFindMatch} onCurling={goCurling} />
   if (route.kind === 'yut') return <YutApp />
+  if (route.kind === 'curling') return <CurlingApp />
   if (route.kind === 'omok') return <Lobby onEnter={enterOmok} />
   if (route.kind === 'secret-card') return <SecretCardLobby onEnter={enterSecretCard} onBack={goHub} />
   if (route.kind === 'find-match') return <FindMatchLobby onEnter={enterFindMatch} onBack={goHub} />

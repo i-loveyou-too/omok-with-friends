@@ -3,11 +3,12 @@ interface Props {
   onSecretCard: () => void
   onYut: () => void
   onFindMatch: () => void
+  onCurling: () => void
 }
 
 const base = import.meta.env.BASE_URL
 
-export function MinigameHub({ onOmok, onSecretCard, onYut, onFindMatch }: Props) {
+export function MinigameHub({ onOmok, onSecretCard, onYut, onFindMatch, onCurling }: Props) {
   return (
     <main className="minigame-hub page-shell">
       <div className="minigame-hub__wash" aria-hidden="true" />
@@ -31,6 +32,10 @@ export function MinigameHub({ onOmok, onSecretCard, onYut, onFindMatch }: Props)
         <button className="minigame-select-card minigame-select-card--find" type="button" onClick={onFindMatch}>
           <img src={`${base}assets/find-match/characters/hachiware_03.png`} alt="" />
           <div><small>딱 하나만 똑같아!</small><h2>눈 크게 떠!</h2><span>시작하기 ›</span></div>
+        </button>
+        <button className="minigame-select-card minigame-select-card--curling" type="button" onClick={onCurling}>
+          <img src={`${base}assets/curling/hub-card.png`} alt="" />
+          <div><small>당기고, 쓩! 가운데를 노려!</small><h2>쓩! 치이컬링</h2><span>시작하기 ›</span></div>
         </button>
       </section>
       <p className="minigame-hub__footer">✦ 둘이서 놀기 좋은 게임을 하나씩 모으는 중 ✦</p>
