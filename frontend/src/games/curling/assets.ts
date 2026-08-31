@@ -10,6 +10,7 @@ export const curlingStoneAssets: Record<CharacterId, string> = {
 }
 
 export const curlingConceptAsset = `${base}assets/curling/concept-approved.png`
+export const curlingLogoAsset = `${base}assets/curling/logo.png`
 
 // Approved top-view PNGs use a 256px canvas with an approximately 160px physical stone rim.
 // 3.2 radii makes that visible rim line up with the server's authoritative 2R collision circle.
