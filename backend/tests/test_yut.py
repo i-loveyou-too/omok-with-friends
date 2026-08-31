@@ -91,12 +91,33 @@ def test_turn_advances_only_after_every_saved_result_is_consumed():
     assert room.must_roll is True
 
 
+def test_backdo_with_no_board_piece_is_removed_and_grants_an_authoritative_reroll():
+    room, first, _ = room_with_players()
+
+    backdo = room.roll(first.token, "backdo")
+
+    assert room.pending_rolls == []
+    assert room.must_roll is True
+    assert room.current_token == first.token
+    assert room.last_event == {
+        "type": "roll",
+        "roll": backdo,
+        "mustRollAgain": True,
+        "autoReroll": True,
+        "message": "빽도! 움직일 말이 없어서 다시 던져!",
+    }
+    next_roll = room.roll(first.token, "do")
+    assert room.pending_rolls == [next_roll]
+
+
 def test_start_piece_rejects_backdo_without_consuming_it_then_board_piece_uses_it():
     room, first, _ = room_with_players()
     waiting = piece(room, first)
     moving = piece(room, first, 1)
     moving.index = ROUTES["outer"].index("O2")
     backdo = room.roll(first.token, "backdo")
+    assert room.must_roll is False
+    assert room.last_event.get("autoReroll") is None
 
     with pytest.raises(GameError) as exc:
         room.move(first.token, waiting.id, backdo["id"])
@@ -108,6 +129,21 @@ def test_start_piece_rejects_backdo_without_consuming_it_then_board_piece_uses_i
     room.move(first.token, moving.id, backdo["id"])
     assert moving.location == "O1"
     assert room.pending_rolls == []
+
+
+def test_auto_backdo_reroll_preserves_saved_yut_and_accepts_the_next_result():
+    room, first, _ = room_with_players()
+    yut = room.roll(first.token, "yut")
+
+    backdo = room.roll(first.token, "backdo")
+    assert [result["id"] for result in room.pending_rolls] == [yut["id"]]
+    assert backdo["id"] not in {result["id"] for result in room.pending_rolls}
+    assert room.must_roll is True
+    assert room.current_token == first.token
+
+    gae = room.roll(first.token, "gae")
+    assert [result["id"] for result in room.pending_rolls] == [yut["id"], gae["id"]]
+    assert room.must_roll is False
 
 
 def test_do_then_backdo_returns_to_start_and_can_depart_again():

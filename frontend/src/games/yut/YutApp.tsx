@@ -327,6 +327,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
     : null
 
   const event = state.lastEvent
+  const autoBackdoReroll = Boolean(event?.autoReroll && presenting?.id === event.roll?.id)
   const eventCard = state.cards.find((card) => card.id === (event?.cardId ?? event?.code))
   const eventTileKind: YutTileKind = eventCard?.tier === '✨' ? 'jackpot' : eventCard?.tier === '💀' ? 'danger' : 'lucky'
   const rollNow = () => {
@@ -383,7 +384,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
               {showResult && (
                 <div className={`yut-roll-readout is-${presenting.name}`} role="status">
                   <strong>{ROLL_LABEL[presenting.name]}!</strong>
-                  <span>{presenting.steps}칸 이동</span>
+                  <span>{autoBackdoReroll ? '움직일 말이 없어서 다시 던져!' : `${presenting.steps}칸 이동`}</span>
                 </div>
               )}
             </div>

@@ -247,6 +247,7 @@ class YutRoom:
 
     def roll(self, token: str, forced_name: Optional[str] = None) -> dict:
         self._assert_turn(token)
+        owner_id = self.players[token].public_id
         self._block_pending_interaction()
         if not self.must_roll:
             raise GameError("choose_roll", "모아 둔 윷 결과 중 사용할 결과를 골라 주세요.")
@@ -259,6 +260,22 @@ class YutRoom:
         self.roll_serial += 1
         result = {"id": self.roll_serial, "name": forced_name, "steps": steps}
         self.pending_rolls.append(result)
+        if forced_name == "backdo" and not any(
+            piece.owner_id == owner_id
+            and not piece.finished
+            and piece.location not in {"S", "F"}
+            for piece in self.pieces
+        ):
+            self.pending_rolls = [item for item in self.pending_rolls if item["id"] != result["id"]]
+            self.must_roll = True
+            self.last_event = {
+                "type": "roll",
+                "roll": result,
+                "mustRollAgain": True,
+                "autoReroll": True,
+                "message": "빽도! 움직일 말이 없어서 다시 던져!",
+            }
+            return result
         self.must_roll = forced_name in {"yut", "mo"}
         self.last_event = {"type": "roll", "roll": result, "mustRollAgain": self.must_roll}
         return result

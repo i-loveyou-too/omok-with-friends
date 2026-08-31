@@ -68,6 +68,7 @@ export interface LuckyEvent {
   probability?: number
   roll?: YutRollResult
   mustRollAgain?: boolean
+  autoReroll?: boolean
   cardId?: string
   instanceId?: string
   ownerId?: string
