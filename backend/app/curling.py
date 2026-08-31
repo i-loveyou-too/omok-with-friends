@@ -29,11 +29,12 @@ STONES_PER_PLAYER = 3
 MIN_POWER = 0.16
 MAX_POWER = 1.0
 MAX_ANGLE_DEG = 28.0
-MAX_SPEED = 1200.0
-FRICTION = 480.0
+MAX_SPEED = 700.0
+FRICTION = 162.0
 SWEEP_FRICTION_FACTOR = 0.88
 SWEEP_CURL_FACTOR = 0.45
 RESTITUTION = 0.90
+SIDE_WALL_RESTITUTION = 0.72
 DT = 1.0 / 60.0
 MAX_STEPS = 360
 SLEEP_SPEED = 9.0
@@ -372,15 +373,24 @@ class CurlingRoom:
 
     @staticmethod
     def _out_of_bounds(stone: CurlingStone) -> bool:
-        # Arcade rule lock: a stone remains live while any part of it is still
-        # on the sheet. It is removed only after the whole collision circle has
-        # cleared a rink edge.
+        # The side rails keep stones live; only fully clearing the open top or
+        # bottom edge removes a stone from play.
         return (
-            stone.x + STONE_RADIUS <= 0.0
-            or stone.x - STONE_RADIUS >= RINK_WIDTH
-            or stone.y + STONE_RADIUS <= 0.0
+            stone.y + STONE_RADIUS <= 0.0
             or stone.y - STONE_RADIUS >= RINK_HEIGHT
         )
+
+    @staticmethod
+    def _reflect_side_wall(stone: CurlingStone, vx: float) -> float:
+        left = STONE_RADIUS
+        right = RINK_WIDTH - STONE_RADIUS
+        if stone.x < left:
+            stone.x = left + (left - stone.x)
+            return abs(vx) * SIDE_WALL_RESTITUTION
+        if stone.x > right:
+            stone.x = right - (stone.x - right)
+            return -abs(vx) * SIDE_WALL_RESTITUTION
+        return vx
 
     def _frame(self) -> list[dict]:
         return [stone.public() for stone in self.stones]
@@ -481,6 +491,8 @@ class CurlingRoom:
                 moving = True
                 stone.x += vx * DT
                 stone.y += vy * DT
+                vx = self._reflect_side_wall(stone, vx)
+                velocities[stone.id] = [vx, vy]
                 if self._out_of_bounds(stone):
                     stone.in_play = False
                     velocities[stone.id] = [0.0, 0.0]
@@ -646,6 +658,8 @@ class CurlingRoom:
                     moving = True
                     stone.x += vx * DT
                     stone.y += vy * DT
+                    vx = self._reflect_side_wall(stone, vx)
+                    velocities[stone.id] = [vx, vy]
                     if self._out_of_bounds(stone):
                         stone.in_play = False
                         velocities[stone.id] = [0.0, 0.0]

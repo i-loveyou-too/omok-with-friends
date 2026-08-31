@@ -4,8 +4,10 @@ import time
 import pytest
 
 from app.curling import (
+    DT,
     HOUSE_X,
     HOUSE_Y,
+    RINK_WIDTH,
     STONE_RADIUS,
     CurlingRoom,
     CurlingStone,
@@ -109,18 +111,16 @@ def test_house_outside_stone_stays_in_play_as_guard_and_scores_zero():
     assert guard in room.stones
 
 
-def test_stone_is_removed_only_after_it_fully_clears_rink_edge():
+def test_side_rails_keep_stones_live_and_open_ends_still_remove_them():
     room, first_token, _ = joined_room()
     first_id = room.players[first_token].public_id
     guard = CurlingStone("guard", first_id, 1, HOUSE_X, HOUSE_Y + 360)
     assert room._out_of_bounds(guard) is False
 
-    # Partly outside is still live under the locked arcade rule.
-    guard.x = -STONE_RADIUS + 0.1
+    guard.x = -STONE_RADIUS
     assert room._out_of_bounds(guard) is False
 
-    # The whole collision circle has cleared the edge.
-    guard.x = -STONE_RADIUS
+    guard.y = -STONE_RADIUS
     assert room._out_of_bounds(guard) is True
 
 def test_end_awards_target_points_to_both_players_and_loser_starts_next_end():
@@ -338,6 +338,91 @@ def test_sweeping_holds_a_curled_stone_straighter():
     swept.finish_live_shot()
 
     assert abs(swept_x - HOUSE_X) < abs(plain_x - HOUSE_X)
+
+
+def test_power_80_curl_is_visible_and_takes_three_to_four_seconds():
+    endpoints = {}
+    durations = {}
+    for curl in ("left", "straight", "right"):
+        room, _, _ = joined_room()
+        room.begin_live_shot(room.current_token, 0.0, 0.80, curl)
+        steps = 0
+        while True:
+            steps += 1
+            if room.step_live_shot():
+                break
+        stone = room.stones[-1]
+        endpoints[curl] = (stone.x, stone.y)
+        durations[curl] = steps * DT
+
+    assert all(3.0 <= duration <= 4.0 for duration in durations.values())
+    assert endpoints["left"][0] < HOUSE_X < endpoints["right"][0]
+    assert endpoints["right"][0] - endpoints["left"][0] >= 150.0
+    assert endpoints["straight"][0] == pytest.approx(HOUSE_X)
+
+
+def test_power_80_full_sweep_adds_carry_and_visibly_straightens_curl():
+    plain, _, _ = joined_room()
+    plain_result = _live_shot(plain, 0.80, "right")
+    plain_stone = next(stone for stone in plain.stones if stone.id == plain_result["stoneId"])
+
+    swept, _, _ = joined_room()
+    swept_result = _live_shot(swept, 0.80, "right", sweep=True)
+    swept_stone = next(stone for stone in swept.stones if stone.id == swept_result["stoneId"])
+
+    assert plain_stone.y - swept_stone.y >= 100.0
+    assert abs(plain_stone.x - HOUSE_X) - abs(swept_stone.x - HOUSE_X) >= 20.0
+
+
+@pytest.mark.parametrize(("angle", "curl"), [(-28.0, "left"), (28.0, "right")])
+def test_power_80_outward_curl_bounces_off_side_wall(angle, curl):
+    room, _, _ = joined_room()
+    room.begin_live_shot(room.current_token, angle, 0.80, curl)
+    shot = room.active_shot
+    assert shot is not None
+    previous_vx = shot.velocities[shot.stone_id][0]
+    bounce_count = 0
+    while True:
+        done = room.step_live_shot()
+        vx = shot.velocities[shot.stone_id][0]
+        if previous_vx * vx < 0.0:
+            bounce_count += 1
+        previous_vx = vx
+        if done:
+            break
+
+    stone = room.stones[-1]
+    assert bounce_count == 1
+    assert STONE_RADIUS <= stone.x <= RINK_WIDTH - STONE_RADIUS
+    assert stone.in_play is True
+
+
+def test_swept_wall_shot_can_take_out_an_opponent_stone():
+    room, first_token, second_token = joined_room()
+    shooter = room.current_token
+    opponent = second_token if shooter == first_token else first_token
+    opponent_id = room.players[opponent].public_id
+    room.stones = [CurlingStone("wall-target", opponent_id, 1, 760.0, 50.0)]
+
+    room.begin_live_shot(shooter, 28.0, 1.0, "straight")
+    room.set_sweeping(shooter, True)
+    shot = room.active_shot
+    assert shot is not None
+    previous_vx = shot.velocities[shot.stone_id][0]
+    bounced = False
+    while True:
+        done = room.step_live_shot()
+        vx = shot.velocities[shot.stone_id][0]
+        bounced = bounced or previous_vx * vx < 0.0
+        previous_vx = vx
+        if done:
+            break
+    result = room.finish_live_shot()
+
+    assert bounced is True
+    assert result["impactCount"] >= 1
+    assert result["opponentTakeoutCount"] == 1
+    assert "wall-target" in result["knockedOutStoneIds"]
 
 
 def test_turn_timer_is_20_seconds_and_timeout_skips_stone():
