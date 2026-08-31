@@ -4,6 +4,11 @@
   "bgm": "../../../audio/chiikawa-exercise-bgm.mp3",
   "sfx": {
     "throw": "yut-throw.ogg",
+    "turn": "result-normal.ogg",
+    "cta": "yut-land.ogg",
+    "press": "yut-land.ogg",
+    "select": "result-normal.ogg",
+    "move": "yut-land.ogg",
     "landing": "yut-land.ogg",
     "smallResult": "result-normal.ogg",
     "bigResult": "result-yut-mo.ogg",

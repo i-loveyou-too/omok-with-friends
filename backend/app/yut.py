@@ -30,6 +30,10 @@ DIAGONAL_B = ["O10", "B1", "B2", "C", "B3", "B4", "O20"]
 SHORT_A = ["S", *[f"O{i}" for i in range(1, 5)], *DIAGONAL_A, *[f"O{i}" for i in range(16, 21)], "F"]
 SHORT_B = ["S", *[f"O{i}" for i in range(1, 10)], *DIAGONAL_B, "F"]
 ROUTES = {"outer": OUTER, "a": SHORT_A, "b": SHORT_B}
+PREVIOUS_BY_ROUTE = {
+    route_name: {location: route[index - 1] for index, location in enumerate(route) if index > 0}
+    for route_name, route in ROUTES.items()
+}
 
 LUCKY_LOCATIONS = {"O2", "O4", "O7", "O9", "O12", "O14", "O17", "O19", "A1", "A3", "B1", "B3", "C"}
 JACKPOT_LOCATIONS = {"O5", "O15", "A2", "B2"}
@@ -290,24 +294,39 @@ class YutRoom:
 
     def _preview_path(self, piece: Piece, steps: int) -> List[str]:
         route = ROUTES[piece.route]
+        if steps < 0:
+            location = piece.location
+            path = []
+            for _ in range(abs(steps)):
+                previous = PREVIOUS_BY_ROUTE[piece.route].get(location)
+                if previous is None:
+                    break
+                path.append(previous)
+                location = previous
+                if location == "S":
+                    break
+            return path
+
         new_index = piece.index + steps
-        if new_index <= 0:
-            return [*reversed(route[1 : piece.index + 1]), "S"][: abs(steps)] or ["S"]
         if new_index >= len(route) - 1:
             return route[piece.index + 1 : -1] + ["F"]
-        if steps > 0:
-            return route[piece.index + 1 : new_index + 1]
-        return list(reversed(route[new_index : piece.index]))
+        return route[piece.index + 1 : new_index + 1]
 
     def _move_piece_steps(self, piece: Piece, steps: int) -> List[str]:
         path = self._preview_path(piece, steps)
         route = ROUTES[piece.route]
+        if steps < 0:
+            destination = path[-1] if path else piece.location
+            if destination == "S":
+                piece.route = "outer"
+                piece.index = 0
+                piece.finished = False
+            else:
+                piece.index = route.index(destination)
+            return path
+
         new_index = piece.index + steps
-        if new_index <= 0:
-            piece.route = "outer"
-            piece.index = 0
-            piece.finished = False
-        elif new_index >= len(route) - 1:
+        if new_index >= len(route) - 1:
             piece.index = len(route) - 1
             piece.finished = True
         else:

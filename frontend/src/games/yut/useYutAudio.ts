@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { YutState } from './types'
 
-export type YutSound = 'throw' | 'landing' | 'smallResult' | 'bigResult' | 'backdo' | 'luckyCard' | 'jackpotCard' | 'dangerCard' | 'capture' | 'stack' | 'finish' | 'victory'
+export type YutSound = 'turn' | 'cta' | 'press' | 'select' | 'move' | 'throw' | 'landing' | 'smallResult' | 'bigResult' | 'backdo' | 'luckyCard' | 'jackpotCard' | 'dangerCard' | 'capture' | 'stack' | 'finish' | 'victory'
 
 interface AudioManifest {
   basePath: string
@@ -128,6 +128,7 @@ export function useYutAudio(state: YutState | null, selfId: string | null) {
 
     const oldEvent = JSON.stringify(before.lastEvent)
     const newEvent = JSON.stringify(state.lastEvent)
+    if (before.turnPlayerId !== state.turnPlayerId && state.turnPlayerId === selfId && state.status === 'playing') play('turn')
     const cardEventChanged = oldEvent !== newEvent && ['card_drawn', 'card_used'].includes(state.lastEvent?.type ?? '')
     const pendingCardChanged = before.pendingCard?.instanceId !== state.pendingCard?.instanceId && Boolean(state.pendingCard)
     if (cardEventChanged || pendingCardChanged) {

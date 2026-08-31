@@ -81,6 +81,76 @@ def test_start_backdo_consumes_only_selected_result():
     assert room.current_token == second.token
 
 
+def test_do_then_backdo_returns_to_start_and_can_depart_again():
+    room, first, second = room_with_players()
+    moving = piece(room, first)
+
+    first_do = room.roll(first.token, "do")
+    room.move(first.token, moving.id, first_do["id"])
+    assert moving.location == "O1"
+
+    second_backdo = room.roll(second.token, "backdo")
+    room.move(second.token, piece(room, second).id, second_backdo["id"])
+    first_backdo = room.roll(first.token, "backdo")
+    room.move(first.token, moving.id, first_backdo["id"])
+    assert moving.location == "S"
+    assert moving.route == "outer"
+    assert moving.index == 0
+    assert room.last_move["path"] == ["S"]
+    assert moving.public()["location"] == "S"
+
+    second_do = room.roll(second.token, "do")
+    room.move(second.token, piece(room, second).id, second_do["id"])
+    depart_again = room.roll(first.token, "do")
+    room.move(first.token, moving.id, depart_again["id"])
+    assert moving.location == "O1"
+    assert room.last_move["path"] == ["O1"]
+
+
+def test_outer_backdo_uses_the_previous_board_cell():
+    room, first, _ = room_with_players()
+    moving = piece(room, first)
+    moving.index = ROUTES["outer"].index("O8")
+    assert room._move_piece_steps(moving, -1) == ["O7"]
+    assert moving.location == "O7"
+
+
+def test_multi_step_reverse_stops_at_start_in_actual_path_order():
+    room, first, _ = room_with_players()
+    moving = piece(room, first)
+    moving.index = ROUTES["outer"].index("O3")
+    assert room._move_piece_steps(moving, -3) == ["O2", "O1", "S"]
+    assert moving.location == "S"
+
+
+def test_backdo_after_shortcut_exit_does_not_jump_to_outer_route():
+    room, first, _ = room_with_players()
+    shortcut = piece(room, first)
+    outer = piece(room, first, 1)
+    shortcut.route = "a"
+    shortcut.index = ROUTES["a"].index("O15")
+    outer.index = ROUTES["outer"].index("O15")
+
+    assert room._move_piece_steps(shortcut, -1) == ["A4"]
+    assert shortcut.location == "A4"
+    assert shortcut.route == "a"
+    assert room._move_piece_steps(outer, -1) == ["O14"]
+    assert outer.location == "O14"
+    assert outer.route == "outer"
+
+
+def test_stacked_pieces_backdo_together_using_one_reverse_path():
+    room, first, _ = room_with_players()
+    leader, mate = piece(room, first), piece(room, first, 1)
+    leader.index = mate.index = ROUTES["outer"].index("O2")
+    backdo = room.roll(first.token, "backdo")
+    room.move(first.token, leader.id, backdo["id"])
+
+    assert leader.location == mate.location == "O1"
+    assert room.last_move["path"] == ["O1"]
+    assert room.last_move["pieceIds"] == [leader.id, mate.id]
+
+
 def test_saved_result_moves_entire_stack_with_one_path():
     room, first, _ = room_with_players()
     leader = piece(room, first)
@@ -462,6 +532,15 @@ def test_lucky_mode_exposes_special_tiles_and_draws_on_them():
     moving.index = ROUTES["outer"].index("O2")
     assert room.force_card_draw_for_test(first.public_id, moving.id, "nothing") is True
     assert room.pending_card["cardId"] == "nothing"
+
+
+def test_frontend_board_paths_have_perimeter_and_diagonals_without_center_cross():
+    source = (Path(__file__).parents[2] / "frontend/src/games/yut/board.ts").read_text()
+    assert "M8 92H92V8H8Z" in source
+    assert "M8 8L92 92" in source
+    assert "M92 8L8 92" in source
+    assert "M8 50H92" not in source
+    assert "M50 8V92" not in source
 
 
 def test_frozen_piece_consumes_one_result_without_discarding_pool():
