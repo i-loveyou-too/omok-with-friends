@@ -14,7 +14,7 @@ export interface YutPlayer {
 export interface YutPiece {
   id: number
   ownerId: string
-  route: 'outer' | 'a' | 'b'
+  route: 'outer' | 'a' | 'a_center' | 'b'
   index: number
   location: string
   finished: boolean

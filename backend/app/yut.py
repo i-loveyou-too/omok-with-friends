@@ -25,11 +25,12 @@ ROLLS = [
 ]
 
 OUTER = ["S", *[f"O{i}" for i in range(1, 21)], "F"]
-DIAGONAL_A = ["O5", "A1", "A2", "C", "B3", "B4", "O20"]
+DIAGONAL_A = ["O5", "A1", "A2", "C", "A3", "A4", "O15"]
 DIAGONAL_B = ["O10", "B1", "B2", "C", "B3", "B4", "O20"]
-SHORT_A = ["S", *[f"O{i}" for i in range(1, 5)], *DIAGONAL_A, "F"]
+SHORT_A = ["S", *[f"O{i}" for i in range(1, 5)], *DIAGONAL_A, *[f"O{i}" for i in range(16, 21)], "F"]
+SHORT_A_CENTER = ["S", *[f"O{i}" for i in range(1, 5)], "O5", "A1", "A2", "C", "B3", "B4", "O20", "F"]
 SHORT_B = ["S", *[f"O{i}" for i in range(1, 10)], *DIAGONAL_B, "F"]
-ROUTES = {"outer": OUTER, "a": SHORT_A, "b": SHORT_B}
+ROUTES = {"outer": OUTER, "a": SHORT_A, "a_center": SHORT_A_CENTER, "b": SHORT_B}
 PREVIOUS_BY_ROUTE = {
     route_name: {location: route[index - 1] for index, location in enumerate(route) if index > 0}
     for route_name, route in ROUTES.items()
@@ -313,6 +314,7 @@ class YutRoom:
         return route[piece.index + 1 : new_index + 1]
 
     def _move_piece_steps(self, piece: Piece, steps: int) -> List[str]:
+        origin_route = piece.route
         path = self._preview_path(piece, steps)
         route = ROUTES[piece.route]
         if steps < 0:
@@ -332,6 +334,9 @@ class YutRoom:
         else:
             piece.index = new_index
             self._switch_route_if_needed(piece)
+            if origin_route == "a" and piece.location == "C":
+                piece.route = "a_center"
+                piece.index = SHORT_A_CENTER.index("C")
         return path
 
     def _move_stack_steps(self, piece: Piece, steps: int, reason: str) -> List[Piece]:
@@ -395,17 +400,14 @@ class YutRoom:
         owner_id = self.players[token].public_id
         piece = self._piece(owner_id, piece_id)
         roll = self._roll_result(roll_id)
+        if piece.location == "S" and roll["steps"] < 0:
+            raise GameError("invalid_backdo_target", "빽도는 판 위의 말을 선택해 주세요.")
         self.pending_rolls = [item for item in self.pending_rolls if item["id"] != roll_id]
         if piece.frozen:
             piece.frozen = False
             self.last_event = {"type": "frozen_skip", "pieceId": piece.id, "message": "얼어붙은 말은 이번 결과를 쉬어요."}
             self._finish_action(owner_id)
             return
-        if piece.location == "S" and roll["steps"] < 0:
-            self.last_event = {"type": "backdo_no_move", "rollId": roll_id, "message": "출발할 말이 없어 빽도 결과를 사용했어요."}
-            self._finish_action(owner_id)
-            return
-
         self._move_stack_steps(piece, int(roll["steps"]), f"roll:{roll['name']}")
         targets = self._capture_candidates(piece)
         if targets:

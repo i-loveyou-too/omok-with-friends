@@ -245,6 +245,8 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
     ? state.pieces.filter((piece) => piece.ownerId === opponent.id && piece.location === 'S' && !piece.finished).length
     : 0
   const pendingCardDefinition = state.cards.find((card) => card.id === state.pendingCard?.cardId)
+  const selectedRoll = state.pendingRolls.find((roll) => roll.id === selectedRollId)
+  const selectedMoveIsBackdo = selectedRoll?.steps === -1
 
   const stackSize = (piece: YutPiece) => state.pieces.filter((candidate) => (
     candidate.ownerId === piece.ownerId
@@ -288,6 +290,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
     if (actionPending) return
     audio.play('select')
     if (!activeCardTarget) {
+      if (selected.location === 'S' && selectedMoveIsBackdo) return
       if (selectedRollId !== null && send({ type: 'move', pieceId: selected.id, rollId: selectedRollId })) setSelectedRollId(null)
       return
     }
@@ -351,7 +354,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
         {cardGuide && <div className={`yut-selection-guide ${pendingCardDefinition?.tier === '💀' ? 'is-danger' : ''}`} role="status">{cardGuide}</div>}
         {!activeCardTarget && myTurn && state.mustRoll && !blocking && <div className="yut-selection-guide">{state.pendingRolls.length ? '윷/모가 나왔어요! 추가 윷부터 모두 던져줘!' : '윷을 던져줘!'}</div>}
         {!activeCardTarget && myTurn && !state.mustRoll && state.pendingRolls.length > 1 && selectedRollId === null && !blocking && <div className="yut-selection-guide">사용할 윷 결과를 먼저 골라줘!</div>}
-        {canMove && <div className="yut-selection-guide">{state.pendingRolls.find((roll) => roll.id === selectedRollId) ? `${ROLL_LABEL[state.pendingRolls.find((roll) => roll.id === selectedRollId)!.name]} 선택됨 · 움직일 말을 골라줘!` : '움직일 말을 골라줘!'}</div>}
+        {canMove && <div className="yut-selection-guide">{selectedRoll ? `${ROLL_LABEL[selectedRoll.name]} 선택됨 · ${selectedMoveIsBackdo ? '판 위의 말을 골라줘!' : '움직일 말을 골라줘!'}` : '움직일 말을 골라줘!'}</div>}
         <div className="yut-board-stage">
           <YutBoard state={state} selfId={selfId} selectionMode={selectionMode} selectedPieceIds={activeCardTarget?.ownPieceId === undefined ? [] : [activeCardTarget.ownPieceId]} selectablePieceKeys={selectablePieceKeys} onSelect={selectPiece} onHop={() => audio.play('move')} />
 
@@ -395,7 +398,7 @@ function YutGame({ roomCode, profile, onSession, onLeave }: { roomCode: string; 
 
             <div className="yut-home-grid">
               {selfHome.map((homePiece) => {
-                const canSelectHome = !actionPending && (selectionMode === 'move' || (selectionMode === 'own' && isSelectableForCard(homePiece)))
+                const canSelectHome = !actionPending && ((selectionMode === 'move' && !selectedMoveIsBackdo) || (selectionMode === 'own' && isSelectableForCard(homePiece)))
 
                 return (
                   <button
