@@ -25,9 +25,9 @@ ROLLS = [
 ]
 
 OUTER = ["S", *[f"O{i}" for i in range(1, 21)], "F"]
-DIAGONAL_A = ["O5", "A1", "A2", "C", "A3", "A4", "O15"]
+DIAGONAL_A = ["O5", "A1", "A2", "C", "B3", "B4", "O20"]
 DIAGONAL_B = ["O10", "B1", "B2", "C", "B3", "B4", "O20"]
-SHORT_A = ["S", *[f"O{i}" for i in range(1, 5)], *DIAGONAL_A, *[f"O{i}" for i in range(16, 21)], "F"]
+SHORT_A = ["S", *[f"O{i}" for i in range(1, 5)], *DIAGONAL_A, "F"]
 SHORT_B = ["S", *[f"O{i}" for i in range(1, 10)], *DIAGONAL_B, "F"]
 ROUTES = {"outer": OUTER, "a": SHORT_A, "b": SHORT_B}
 PREVIOUS_BY_ROUTE = {
@@ -344,6 +344,12 @@ class YutRoom:
             mate.route = piece.route
             mate.index = piece.index
             mate.finished = piece.finished
+        if not piece.finished and piece.location not in {"S", "F"}:
+            for resident in self.pieces:
+                if resident.owner_id != piece.owner_id or resident.finished or resident.location != piece.location:
+                    continue
+                resident.route = piece.route
+                resident.index = piece.index
         self._record_move({
             "reason": reason,
             "ownerId": piece.owner_id,
@@ -663,6 +669,8 @@ class YutRoom:
         self._finish_action(owner_id)
 
     def card_choice(self, token: str, choice: str, piece_id: Optional[int] = None, target_piece_id: Optional[int] = None) -> None:
+        if self.mode != "lucky":
+            raise GameError("cards_disabled", "기본모드에서는 운빨카드를 사용할 수 없어요.")
         self._assert_turn(token)
         if not self.pending_card:
             raise GameError("no_pending_card", "선택할 카드가 없어요.")
@@ -691,6 +699,8 @@ class YutRoom:
         self._after_card_effect(owner_id, moved)
 
     def use_kept_card(self, token: str, instance_id: str, piece_id: Optional[int] = None, target_piece_id: Optional[int] = None) -> None:
+        if self.mode != "lucky":
+            raise GameError("cards_disabled", "기본모드에서는 운빨카드를 사용할 수 없어요.")
         self._assert_turn(token)
         self._block_pending_interaction()
         if self.must_roll:
@@ -751,14 +761,14 @@ class YutRoom:
             "pendingRolls": list(self.pending_rolls),
             "mustRoll": self.must_roll,
             "pendingCapture": self.pending_capture,
-            "pendingCard": self.pending_card,
-            "hands": {owner_id: list(cards) for owner_id, cards in self.hands.items()},
+            "pendingCard": self.pending_card if self.mode == "lucky" else None,
+            "hands": {owner_id: list(cards) for owner_id, cards in self.hands.items()} if self.mode == "lucky" else {},
             "lastMove": self.last_move,
             "winnerId": self.winner_id,
             "lastEvent": self.last_event,
             "rematchReady": [self.players[t].public_id for t in self.rematch_ready if t in self.players],
             "lucky": special_locations,
-            "cards": [public_card(card) for card in CARD_DEFINITIONS],
+            "cards": [public_card(card) for card in CARD_DEFINITIONS] if self.mode == "lucky" else [],
         }
 
 

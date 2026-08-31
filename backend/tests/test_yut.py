@@ -34,6 +34,26 @@ def finish_except(room, player, *piece_ids):
             candidate.index = len(ROUTES[candidate.route]) - 1
 
 
+def move_through_real_turns(room, actor, other, moving, outcomes):
+    """Move only through public roll/move calls while the opponent yields at S."""
+    waiting = piece(room, other)
+    history = []
+    for outcome in outcomes:
+        if room.current_token != actor.token:
+            wait = room.roll(other.token, "backdo")
+            room.move(other.token, waiting.id, wait["id"])
+        result = room.roll(actor.token, outcome)
+        room.move(actor.token, moving.id, result["id"])
+        history.append({
+            "location": moving.location,
+            "route": moving.route,
+            "index": moving.index,
+            "finished": moving.finished,
+            "path": list(room.last_move["path"]),
+        })
+    return history
+
+
 def test_room_starts_with_v2_turn_state_and_four_pieces_per_player():
     room, first, second = room_with_players()
     assert room.status == "playing"
@@ -128,14 +148,14 @@ def test_backdo_after_shortcut_exit_does_not_jump_to_outer_route():
     shortcut = piece(room, first)
     outer = piece(room, first, 1)
     shortcut.route = "a"
-    shortcut.index = ROUTES["a"].index("O15")
-    outer.index = ROUTES["outer"].index("O15")
+    shortcut.index = ROUTES["a"].index("O20")
+    outer.index = ROUTES["outer"].index("O20")
 
-    assert room._move_piece_steps(shortcut, -1) == ["A4"]
-    assert shortcut.location == "A4"
+    assert room._move_piece_steps(shortcut, -1) == ["B4"]
+    assert shortcut.location == "B4"
     assert shortcut.route == "a"
-    assert room._move_piece_steps(outer, -1) == ["O14"]
-    assert outer.location == "O14"
+    assert room._move_piece_steps(outer, -1) == ["O19"]
+    assert outer.location == "O19"
     assert outer.route == "outer"
 
 
@@ -164,17 +184,17 @@ def test_saved_result_moves_entire_stack_with_one_path():
     assert room.last_move["path"] == ["O4", "O5"]
 
 
-def test_shortcuts_cross_center_only_along_the_same_diagonal():
+def test_shortcuts_choose_the_expected_center_exit_for_the_entry_route():
     room, first, _ = room_with_players()
     moving = piece(room, first)
 
-    assert DIAGONAL_A == ["O5", "A1", "A2", "C", "A3", "A4", "O15"]
+    assert DIAGONAL_A == ["O5", "A1", "A2", "C", "B3", "B4", "O20"]
     assert DIAGONAL_B == ["O10", "B1", "B2", "C", "B3", "B4", "O20"]
 
     moving.route = "a"
     moving.index = ROUTES["a"].index("A2")
-    assert room._move_piece_steps(moving, 2) == ["C", "A3"]
-    assert moving.location == "A3"
+    assert room._move_piece_steps(moving, 2) == ["C", "B3"]
+    assert moving.location == "B3"
 
     moving.route = "b"
     moving.index = ROUTES["b"].index("B2")
@@ -182,7 +202,91 @@ def test_shortcuts_cross_center_only_along_the_same_diagonal():
     assert moving.location == "B3"
 
 
-@pytest.mark.parametrize(("route", "start", "after_center"), [("a", "A3", "A2"), ("b", "B3", "B2")])
+def test_real_roll_move_flow_keeps_b_route_from_start_through_finish():
+    room, first, second = room_with_players()
+    moving = piece(room, first)
+    history = move_through_real_turns(
+        room,
+        first,
+        second,
+        moving,
+        ["geol", "geol", "geol", "do", "do", "do", "do", "do", "do", "do", "do"],
+    )
+
+    assert [step["location"] for step in history] == [
+        "O3", "O6", "O9", "O10", "B1", "B2", "C", "B3", "B4", "O20", "F",
+    ]
+    assert [step["path"] for step in history[3:]] == [
+        ["O10"], ["B1"], ["B2"], ["C"], ["B3"], ["B4"], ["O20"], ["F"],
+    ]
+    assert all(step["route"] == "b" for step in history[3:])
+    assert history[-2]["index"] == ROUTES["b"].index("O20")
+    assert history[-1]["index"] == ROUTES["b"].index("F")
+    assert history[-1]["finished"] is True
+    assert moving.public()["location"] == "F"
+
+
+def test_real_roll_move_flow_uses_o5_entry_then_b_exit_through_finish():
+    room, first, second = room_with_players()
+    moving = piece(room, first)
+    history = move_through_real_turns(room, first, second, moving, ["do"] * 12)
+
+    assert [step["location"] for step in history] == [
+        "O1", "O2", "O3", "O4", "O5", "A1", "A2", "C", "B3", "B4", "O20", "F",
+    ]
+    assert all(step["route"] == "a" for step in history[4:])
+    assert [step["path"] for step in history[4:]] == [
+        ["O5"], ["A1"], ["A2"], ["C"], ["B3"], ["B4"], ["O20"], ["F"],
+    ]
+    assert history[-1]["finished"] is True
+
+
+def test_real_o5_shortcut_backdo_retraces_the_actual_entry_history():
+    room, first, second = room_with_players()
+    moving = piece(room, first)
+    history = move_through_real_turns(room, first, second, moving, ["do"] * 10 + ["backdo"] * 5)
+
+    assert [step["location"] for step in history[9:]] == ["B4", "B3", "C", "A2", "A1", "O5"]
+    assert [step["path"] for step in history[10:]] == [["B3"], ["C"], ["A2"], ["A1"], ["O5"]]
+    assert all(step["route"] == "a" for step in history[4:])
+
+
+def test_real_b_route_backdo_returns_from_center_toward_b2():
+    room, first, second = room_with_players()
+    moving = piece(room, first)
+    history = move_through_real_turns(
+        room,
+        first,
+        second,
+        moving,
+        ["geol", "geol", "geol", "do", "do", "do", "do", "backdo", "backdo"],
+    )
+
+    assert [step["location"] for step in history[-4:]] == ["B2", "C", "B2", "B1"]
+    assert [step["path"] for step in history[-2:]] == [["B2"], ["B1"]]
+    assert all(step["route"] == "b" for step in history[3:])
+
+
+def test_real_b_route_arrival_at_center_sets_route_for_the_whole_stack():
+    room, first, second = room_with_players()
+    resident = piece(room, first)
+    arriving = piece(room, first, 1)
+
+    move_through_real_turns(room, first, second, resident, ["gae", "geol", "geol"])
+    assert resident.location == "C"
+    assert resident.route == "a"
+
+    move_through_real_turns(room, first, second, arriving, ["geol", "geol", "geol", "do", "geol"])
+    assert arriving.location == resident.location == "C"
+    assert arriving.route == resident.route == "b"
+
+    history = move_through_real_turns(room, first, second, resident, ["do"])
+    assert resident.location == arriving.location == "B3"
+    assert resident.route == arriving.route == "b"
+    assert history[-1]["path"] == ["B3"]
+
+
+@pytest.mark.parametrize(("route", "start", "after_center"), [("a", "B3", "A2"), ("b", "B3", "B2")])
 def test_backdo_from_shortcut_stays_on_its_diagonal(route, start, after_center):
     room, first, _ = room_with_players()
     moving = piece(room, first)
@@ -195,7 +299,7 @@ def test_backdo_from_shortcut_stays_on_its_diagonal(route, start, after_center):
     assert moving.route == route
 
 
-@pytest.mark.parametrize(("route", "start", "steps"), [("a", "A4", 7), ("b", "B4", 2)])
+@pytest.mark.parametrize(("route", "start", "steps"), [("a", "B4", 2), ("b", "B4", 2)])
 def test_shortcut_routes_reach_finish_without_using_cross_lines(route, start, steps):
     room, first, _ = room_with_players()
     moving = piece(room, first)
@@ -441,8 +545,9 @@ def test_swap_kept_card_uses_explicit_own_and_opponent_targets():
         ("golden_yut", "O3", True),
     ],
 )
-def test_explicit_movement_card_targets(card_id, expected_location, grants_roll):
-    room, first, _ = room_with_players("classic")
+def test_explicit_movement_card_targets(monkeypatch, card_id, expected_location, grants_roll):
+    room, first, _ = room_with_players("lucky")
+    monkeypatch.setattr(room, "_maybe_draw_card", lambda *_args, **_kwargs: False)
     moving = piece(room, first)
     moving.index = 2
     room.must_roll = False
@@ -487,7 +592,7 @@ def test_card_movement_uses_capture_confirmation_and_draws_next_card(monkeypatch
 
 
 def test_card_movement_can_finish_last_piece_and_end_game():
-    room, first, _ = room_with_players("classic")
+    room, first, _ = room_with_players("lucky")
     moving = piece(room, first)
     finish_except(room, first, moving.id)
     moving.index = 20
@@ -512,13 +617,24 @@ def test_classic_mode_exposes_only_normal_tiles_and_never_draws_cards():
     room, first, _ = room_with_players("classic")
     moving = piece(room, first)
 
-    assert room.snapshot()["lucky"] == {"normal": [], "jackpot": [], "danger": []}
+    snapshot = room.snapshot()
+    assert snapshot["lucky"] == {"normal": [], "jackpot": [], "danger": []}
+    assert snapshot["pendingCard"] is None
+    assert snapshot["hands"] == {}
+    assert snapshot["cards"] == []
     roll = room.roll(first.token, "gae")
     room.move(first.token, moving.id, roll["id"])
     assert moving.location == "O2"
     assert room.pending_card is None
     assert room.last_event["type"] != "card_drawn"
     assert room.force_card_draw_for_test(first.public_id, moving.id, "nothing") is False
+
+    room.must_roll = False
+    room.hands[first.public_id].append({"instanceId": "stale", "cardId": "nothing"})
+    with pytest.raises(GameError) as exc:
+        room.use_kept_card(first.token, "stale")
+    assert exc.value.code == "cards_disabled"
+    assert room.snapshot()["hands"] == {}
 
 
 def test_lucky_mode_exposes_special_tiles_and_draws_on_them():
