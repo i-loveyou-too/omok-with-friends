@@ -32,7 +32,7 @@ MAX_ANGLE_DEG = 28.0
 MAX_SPEED = 700.0
 FRICTION = 162.0
 SWEEP_FRICTION_FACTOR = 0.88
-SWEEP_CURL_FACTOR = 0.45
+SWEEP_CURL_FACTOR = 0.65
 RESTITUTION = 0.90
 SIDE_WALL_RESTITUTION = 0.72
 DT = 1.0 / 60.0
@@ -42,7 +42,9 @@ SCORE_EPSILON = 1.0
 TRANSITION_SECONDS = 2.8
 TURN_DURATION_SECONDS = 20
 RECONNECT_GRACE_SECONDS = 20
-CURL_RATE_DEG_PER_SECOND = 7.0
+CURL_RATE_DEG_PER_SECOND = 20.0
+CURL_MIN_RATE_FACTOR = 0.15
+CURL_SPEED_CURVE_EXPONENT = 1.5
 SCORE_RINGS = ((45.0, 50), (100.0, 30), (150.0, 20), (190.0, 10))
 CURL_DIRECTIONS = {"left": -1, "straight": 0, "right": 1}
 
@@ -372,6 +374,16 @@ class CurlingRoom:
         return vx * scale, vy * scale
 
     @staticmethod
+    def _curl_rate(speed: float, sweeping: bool = False) -> float:
+        speed_ratio = min(1.0, speed / MAX_SPEED)
+        slowdown = max(0.0, 1.0 - speed_ratio)
+        ramp = CURL_MIN_RATE_FACTOR + (1.0 - CURL_MIN_RATE_FACTOR) * (
+            slowdown ** CURL_SPEED_CURVE_EXPONENT
+        )
+        rate = CURL_RATE_DEG_PER_SECOND * ramp
+        return rate * SWEEP_CURL_FACTOR if sweeping else rate
+
+    @staticmethod
     def _out_of_bounds(stone: CurlingStone) -> bool:
         # The side rails keep stones live; only fully clearing the open top or
         # bottom edge removes a stone from play.
@@ -546,12 +558,9 @@ class CurlingRoom:
             vx, vy = velocities.setdefault(stone.id, [0.0, 0.0])
             if stone.id == shot.stone_id and curl_sign and (vx or vy):
                 current_speed = self._speed(vx, vy)
-                speed_ratio = min(1.0, current_speed / MAX_SPEED)
-                rate = CURL_RATE_DEG_PER_SECOND * (0.35 + 0.65 * (1.0 - speed_ratio))
+                rate = self._curl_rate(current_speed, shot.sweeping)
                 # Sweeping intentionally makes the delivered stone travel
                 # farther *and* hold a straighter line.
-                if shot.sweeping:
-                    rate *= SWEEP_CURL_FACTOR
                 theta = math.radians(rate * DT * curl_sign)
                 cos_t, sin_t = math.cos(theta), math.sin(theta)
                 vx, vy = vx * cos_t - vy * sin_t, vx * sin_t + vy * cos_t
@@ -716,8 +725,7 @@ class CurlingRoom:
                 # aiming predictable while still enabling guards and draw shots.
                 if stone.id == launched.id and curl_sign and (vx or vy):
                     current_speed = self._speed(vx, vy)
-                    speed_ratio = min(1.0, current_speed / MAX_SPEED)
-                    rate = CURL_RATE_DEG_PER_SECOND * (0.35 + 0.65 * (1.0 - speed_ratio))
+                    rate = self._curl_rate(current_speed)
                     theta = math.radians(rate * DT * curl_sign)
                     cos_t, sin_t = math.cos(theta), math.sin(theta)
                     vx, vy = vx * cos_t - vy * sin_t, vx * sin_t + vy * cos_t

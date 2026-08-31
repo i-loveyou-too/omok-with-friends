@@ -343,22 +343,33 @@ def test_sweeping_holds_a_curled_stone_straighter():
 def test_power_80_curl_is_visible_and_takes_three_to_four_seconds():
     endpoints = {}
     durations = {}
+    paths = {}
     for curl in ("left", "straight", "right"):
         room, _, _ = joined_room()
         room.begin_live_shot(room.current_token, 0.0, 0.80, curl)
         steps = 0
+        samples = []
         while True:
             steps += 1
-            if room.step_live_shot():
+            done = room.step_live_shot()
+            if steps in {30, 60, 90, 120, 150, 180}:
+                samples.append((room.stones[-1].x, room.stones[-1].y))
+            if done:
                 break
         stone = room.stones[-1]
         endpoints[curl] = (stone.x, stone.y)
         durations[curl] = steps * DT
+        paths[curl] = samples
 
     assert all(3.0 <= duration <= 4.0 for duration in durations.values())
-    assert endpoints["left"][0] < HOUSE_X < endpoints["right"][0]
-    assert endpoints["right"][0] - endpoints["left"][0] >= 150.0
+    assert 350.0 <= endpoints["left"][0] <= 380.0
     assert endpoints["straight"][0] == pytest.approx(HOUSE_X)
+    assert 620.0 <= endpoints["right"][0] <= 650.0
+
+    left_halfway_bend = HOUSE_X - paths["left"][2][0]
+    left_late_bend = paths["left"][2][0] - endpoints["left"][0]
+    assert HOUSE_X - paths["left"][0][0] < 10.0
+    assert left_late_bend >= left_halfway_bend * 1.8
 
 
 def test_power_80_full_sweep_adds_carry_and_visibly_straightens_curl():
@@ -371,7 +382,9 @@ def test_power_80_full_sweep_adds_carry_and_visibly_straightens_curl():
     swept_stone = next(stone for stone in swept.stones if stone.id == swept_result["stoneId"])
 
     assert plain_stone.y - swept_stone.y >= 100.0
-    assert abs(plain_stone.x - HOUSE_X) - abs(swept_stone.x - HOUSE_X) >= 20.0
+    straightening = abs(plain_stone.x - HOUSE_X) - abs(swept_stone.x - HOUSE_X)
+    assert straightening >= 15.0
+    assert abs(swept_stone.x - HOUSE_X) >= 100.0
 
 
 @pytest.mark.parametrize(("angle", "curl"), [(-28.0, "left"), (28.0, "right")])
