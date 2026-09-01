@@ -146,7 +146,7 @@ def test_auto_backdo_reroll_preserves_saved_yut_and_accepts_the_next_result():
     assert room.must_roll is False
 
 
-def test_do_then_backdo_returns_to_start_and_can_depart_again():
+def test_do_then_backdo_finishes_with_authoritative_finish_path():
     room, first, second = room_with_players()
     moving = piece(room, first)
 
@@ -160,18 +160,44 @@ def test_do_then_backdo_returns_to_start_and_can_depart_again():
     room.move(second.token, opponent.id, second_backdo["id"])
     first_backdo = room.roll(first.token, "backdo")
     room.move(first.token, moving.id, first_backdo["id"])
-    assert moving.location == "S"
+    assert moving.location == "F"
     assert moving.route == "outer"
-    assert moving.index == 0
-    assert room.last_move["path"] == ["S"]
-    assert moving.public()["location"] == "S"
+    assert moving.index == ROUTES["outer"].index("F")
+    assert moving.finished is True
+    assert room.last_move["from"] == "O1"
+    assert room.last_move["path"] == ["F"]
+    assert room.last_move["to"] == "F"
+    assert moving.public()["location"] == "F"
 
-    second_do = room.roll(second.token, "do")
-    room.move(second.token, opponent.id, second_do["id"])
-    depart_again = room.roll(first.token, "do")
-    room.move(first.token, moving.id, depart_again["id"])
-    assert moving.location == "O1"
-    assert room.last_move["path"] == ["O1"]
+
+def test_backdo_from_o1_finishes_the_entire_stack():
+    room, first, _ = room_with_players()
+    leader, mate = piece(room, first), piece(room, first, 1)
+    leader.index = mate.index = ROUTES["outer"].index("O1")
+
+    backdo = room.roll(first.token, "backdo")
+    room.move(first.token, leader.id, backdo["id"])
+
+    assert leader.finished is True
+    assert mate.finished is True
+    assert leader.location == mate.location == "F"
+    assert room.last_move["pieceIds"] == [leader.id, mate.id]
+    assert room.last_move["path"] == ["F"]
+
+
+def test_backdo_from_o1_finishes_last_piece_and_wins():
+    room, first, _ = room_with_players()
+    moving = piece(room, first)
+    finish_except(room, first, moving.id)
+    moving.index = ROUTES["outer"].index("O1")
+
+    backdo = room.roll(first.token, "backdo")
+    room.move(first.token, moving.id, backdo["id"])
+
+    assert moving.finished is True
+    assert room.status == "finished"
+    assert room.winner_id == first.public_id
+    assert first.score == 1
 
 
 def test_outer_backdo_uses_the_previous_board_cell():
@@ -255,6 +281,69 @@ def test_o5_shortcut_turns_at_center_only_when_the_move_lands_there():
     moving.index = ROUTES["b"].index("B2")
     assert room._move_piece_steps(moving, 2) == ["C", "B3"]
     assert moving.location == "B3"
+
+
+def test_exact_center_landing_survives_turn_change_and_reconnect_then_exits_to_b3():
+    room, first, second = room_with_players()
+    moving = piece(room, first)
+    moving.route = "a"
+    moving.index = ROUTES["a"].index("A2")
+
+    center_roll = room.roll(first.token, "do")
+    room.move(first.token, moving.id, center_roll["id"])
+    assert room.current_token == second.token
+    assert moving.location == "C"
+    assert moving.route == "a_center"
+    assert room.snapshot()["pieces"][moving.id]["route"] == "a_center"
+
+    room.disconnect(first.token)
+    reconnected = room.join("first", "chiikawa", first.token)
+    assert reconnected.public_id == first.public_id
+    assert room.snapshot()["pieces"][moving.id]["route"] == "a_center"
+
+    waiting = piece(room, second)
+    waiting.index = ROUTES["outer"].index("O20")
+    wait_roll = room.roll(second.token, "backdo")
+    room.move(second.token, waiting.id, wait_roll["id"])
+    assert room.current_token == first.token
+
+    exit_roll = room.roll(first.token, "do")
+    room.move(first.token, moving.id, exit_roll["id"])
+    assert moving.location == "B3"
+    assert moving.route == "a_center"
+    assert room.last_move["path"] == ["B3"]
+
+
+def test_exact_center_landing_uses_saved_roll_on_authoritative_center_route():
+    room, first, _ = room_with_players()
+    moving = piece(room, first)
+    moving.route = "a"
+    moving.index = ROUTES["a"].index("A2")
+
+    saved_yut = room.roll(first.token, "yut")
+    center_roll = room.roll(first.token, "do")
+    room.move(first.token, moving.id, center_roll["id"])
+    assert moving.location == "C"
+    assert moving.route == "a_center"
+    assert [roll["id"] for roll in room.pending_rolls] == [saved_yut["id"]]
+
+    room.move(first.token, moving.id, saved_yut["id"])
+    assert room.last_move["path"][0] == "B3"
+    assert room.last_move["path"] == ["B3", "B4", "O20", "F"]
+    assert moving.finished is True
+
+
+def test_center_shortcut_backdo_retraces_to_a2_after_returning_from_b3():
+    room, first, second = room_with_players()
+    moving = piece(room, first)
+    moving.route = "a_center"
+    moving.index = ROUTES["a_center"].index("C")
+
+    history = move_through_real_turns(room, first, second, moving, ["do", "backdo", "backdo"])
+
+    assert [step["location"] for step in history] == ["B3", "C", "A2"]
+    assert [step["path"] for step in history] == [["B3"], ["C"], ["A2"]]
+    assert all(step["route"] == "a_center" for step in history)
 
 
 def test_real_roll_move_flow_keeps_b_route_from_start_through_finish():
@@ -359,7 +448,7 @@ def test_real_b_route_backdo_returns_from_center_toward_b2():
     assert all(step["route"] == "b" for step in history[3:])
 
 
-def test_real_b_route_arrival_at_center_sets_route_for_the_whole_stack():
+def test_center_shortcut_state_wins_when_another_piece_stacks_at_center():
     room, first, second = room_with_players()
     resident = piece(room, first)
     arriving = piece(room, first, 1)
@@ -370,12 +459,28 @@ def test_real_b_route_arrival_at_center_sets_route_for_the_whole_stack():
 
     move_through_real_turns(room, first, second, arriving, ["geol", "geol", "geol", "do", "geol"])
     assert arriving.location == resident.location == "C"
-    assert arriving.route == resident.route == "b"
+    assert arriving.route == resident.route == "a_center"
 
     history = move_through_real_turns(room, first, second, resident, ["do"])
     assert resident.location == arriving.location == "B3"
-    assert resident.route == arriving.route == "b"
+    assert resident.route == arriving.route == "a_center"
     assert history[-1]["path"] == ["B3"]
+
+
+def test_center_shortcut_route_survives_later_stack_sync_at_o20():
+    room, first, _ = room_with_players()
+    shortcut = piece(room, first)
+    outer = piece(room, first, 1)
+    shortcut.route = "a_center"
+    shortcut.index = ROUTES["a_center"].index("O20")
+    outer.route = "outer"
+    outer.index = ROUTES["outer"].index("O19")
+
+    room._move_stack_steps(outer, 1, "test:stack")
+
+    assert shortcut.location == outer.location == "O20"
+    assert shortcut.route == outer.route == "a_center"
+    assert room._move_piece_steps(outer, -1) == ["B4"]
 
 
 @pytest.mark.parametrize(("route", "start", "after_center"), [("a_center", "B3", "A2"), ("b", "B3", "B2")])
@@ -417,6 +522,28 @@ def test_stack_and_capture_remain_authoritative_at_shortcut_center():
     room.confirm_capture(first.token)
     assert target.location == "S"
     assert room.must_roll is True
+
+
+def test_exact_center_route_survives_capture_confirmation():
+    room, first, second = room_with_players()
+    moving = piece(room, first)
+    target = piece(room, second)
+    moving.route = target.route = "a"
+    moving.index = ROUTES["a"].index("A2")
+    target.index = ROUTES["a"].index("C")
+
+    center_roll = room.roll(first.token, "do")
+    room.move(first.token, moving.id, center_roll["id"])
+    assert moving.route == "a_center"
+    assert room.pending_capture is not None
+
+    room.confirm_capture(first.token)
+    assert moving.route == "a_center"
+    assert target.location == "S"
+    exit_roll = room.roll(first.token, "do")
+    room.move(first.token, moving.id, exit_roll["id"])
+    assert moving.location == "B3"
+    assert room.last_move["path"] == ["B3"]
 
 
 def test_capture_waits_for_confirmation_then_grants_bonus_throw():
@@ -696,6 +823,22 @@ def test_card_movement_can_finish_last_piece_and_end_game():
     assert room.winner_id == first.public_id
 
 
+def test_card_exact_center_landing_persists_as_authoritative_shortcut(monkeypatch):
+    room, first, _ = room_with_players("lucky")
+    moving = piece(room, first)
+    moving.route = "a"
+    moving.index = ROUTES["a"].index("A2")
+    room.must_roll = False
+    room.hands[first.public_id].append({"instanceId": "center", "cardId": "plus_one"})
+    monkeypatch.setattr(room, "_maybe_draw_card", lambda *_args, **_kwargs: False)
+
+    room.use_kept_card(first.token, "center", moving.id)
+
+    assert moving.location == "C"
+    assert moving.route == "a_center"
+    assert room.snapshot()["pieces"][moving.id]["route"] == "a_center"
+
+
 def test_move_records_deterministic_stepwise_path():
     room, first, _ = room_with_players()
     roll = room.roll(first.token, "geol")
@@ -837,3 +980,55 @@ def test_yut_api_websocket_join_and_v2_action_dispatch():
         assert rejoined["reconnected"] is True
         assert synced["state"]["players"][0]["connected"] is True
         assert "pendingRolls" in synced["state"]
+
+
+def test_two_websocket_clients_keep_exact_center_route_across_real_turns():
+    response = client.post("/omokwithfriend/api/yut/rooms?mode=classic")
+    assert response.status_code == 201
+    code = response.json()["roomCode"]
+
+    with client.websocket_connect(f"/omokwithfriend/ws/yut/rooms/{code}") as first_socket:
+        first_socket.send_json({"type": "join", "nickname": "A", "character": "hachiware"})
+        first_joined = first_socket.receive_json()
+        first_socket.receive_json()
+        with client.websocket_connect(f"/omokwithfriend/ws/yut/rooms/{code}") as second_socket:
+            second_socket.send_json({"type": "join", "nickname": "B", "character": "usagi"})
+            second_socket.receive_json()
+            second_socket.receive_json()
+            first_socket.receive_json()
+
+            room = yut_room_manager.get(code)
+            first = room.players[first_joined["token"]]
+            second = next(player for token, player in room.players.items() if token != first_joined["token"])
+            moving = piece(room, first)
+            moving.route = "a"
+            moving.index = ROUTES["a"].index("A2")
+            room.roll_serial += 1
+            room.pending_rolls = [{"id": room.roll_serial, "name": "do", "steps": 1}]
+            room.must_roll = False
+
+            first_socket.send_json({"type": "move", "pieceId": moving.id, "rollId": room.roll_serial})
+            first_state = first_socket.receive_json()["state"]
+            second_state = second_socket.receive_json()["state"]
+            assert first_state["pieces"][moving.id]["route"] == "a_center"
+            assert second_state["pieces"][moving.id]["route"] == "a_center"
+            assert first_state["turnPlayerId"] == second.public_id
+
+            waiting = piece(room, second)
+            waiting.index = ROUTES["outer"].index("O20")
+            room.roll_serial += 1
+            room.pending_rolls = [{"id": room.roll_serial, "name": "backdo", "steps": -1}]
+            room.must_roll = False
+            second_socket.send_json({"type": "move", "pieceId": waiting.id, "rollId": room.roll_serial})
+            first_socket.receive_json()
+            second_socket.receive_json()
+
+            room.roll_serial += 1
+            room.pending_rolls = [{"id": room.roll_serial, "name": "do", "steps": 1}]
+            room.must_roll = False
+            first_socket.send_json({"type": "move", "pieceId": moving.id, "rollId": room.roll_serial})
+            first_state = first_socket.receive_json()["state"]
+            second_state = second_socket.receive_json()["state"]
+            assert first_state["pieces"][moving.id]["location"] == "B3"
+            assert second_state["pieces"][moving.id]["route"] == "a_center"
+            assert first_state["lastMove"]["path"] == ["B3"]

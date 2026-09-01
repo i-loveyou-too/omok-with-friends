@@ -313,6 +313,10 @@ class YutRoom:
     def _preview_path(self, piece: Piece, steps: int) -> List[str]:
         route = ROUTES[piece.route]
         if steps < 0:
+            # In this ruleset, a back-do from the first board space completes
+            # the run instead of returning the piece to the waiting area.
+            if steps == -1 and piece.location == "O1":
+                return ["F"]
             location = piece.location
             path = []
             for _ in range(abs(steps)):
@@ -336,7 +340,10 @@ class YutRoom:
         route = ROUTES[piece.route]
         if steps < 0:
             destination = path[-1] if path else piece.location
-            if destination == "S":
+            if destination == "F":
+                piece.index = len(route) - 1
+                piece.finished = True
+            elif destination == "S":
                 piece.route = "outer"
                 piece.index = 0
                 piece.finished = False
@@ -360,18 +367,30 @@ class YutRoom:
         stack = self._same_stack(piece)
         origin = piece.location
         path = self._move_piece_steps(piece, steps)
-        for mate in stack:
-            if mate is piece:
-                continue
-            mate.route = piece.route
-            mate.index = piece.index
-            mate.finished = piece.finished
+        residents: List[Piece] = []
         if not piece.finished and piece.location not in {"S", "F"}:
-            for resident in self.pieces:
-                if resident.owner_id != piece.owner_id or resident.finished or resident.location != piece.location:
-                    continue
-                resident.route = piece.route
-                resident.index = piece.index
+            residents = [
+                resident
+                for resident in self.pieces
+                if resident not in stack
+                and resident.owner_id == piece.owner_id
+                and not resident.finished
+                and resident.location == piece.location
+            ]
+
+        # Exact A2 -> C landing is authoritative server state. Once any piece
+        # in the resulting stack owns that state, stacking anywhere along its
+        # route must not downgrade the route back to another board path.
+        stack_route = piece.route
+        if piece.location in ROUTES["a_center"] and any(
+            candidate.route == "a_center" for candidate in [*stack, *residents]
+        ):
+            stack_route = "a_center"
+        stack_index = ROUTES[stack_route].index(piece.location) if not piece.finished else piece.index
+        for mate in [*stack, *residents]:
+            mate.route = stack_route
+            mate.index = stack_index
+            mate.finished = piece.finished
         self._record_move({
             "reason": reason,
             "ownerId": piece.owner_id,
